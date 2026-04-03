@@ -1,0 +1,19 @@
+{
+  "portal_url": "https://partners.hathway-connect.com/Login.aspx",
+  "username": "YOUR_USERNAME",
+  "password": "YOUR_PASSWORD",
+  "box_numbers": [
+    "BOX001234",
+    "BOX005678",
+    "BOX009012"
+  ],
+  "target_plan_name": "HW TL BRONZE KMM 30d",
+  "bouquet_name": "Hathway Bouquet",
+  "headless": false,
+  "slow_mo": 80,
+  "captcha_max_retries": 5,
+  "renewal_max_retries": 2,
+  "delay_between_boxes": 2.0,
+  "log_file": "hathway_automation.log",
+  "captcha_debug_dir": "captcha_debug"
+}

@@ -1,0 +1,492 @@
+
+
+
+"""
+agents/renewal_agent.py — Core renewal workflow for each STB box.
+
+Steps per box:
+  A. Search box number
+  B. Click "Main TV"
+  C. Click "Add Plan"
+  D. Click "Hathway Bouquet"
+  E. Select "HW TL BRONZE KMM 30d"
+  F. Click Submit  ← reliable force-click with JS fallback
+  G. Click Confirm ← waits for modal/page to settle first
+  H. Click OK      ← final confirmation dialog
+"""
+
+import asyncio
+from playwright.async_api import Page
+from agents.navigation_agent import NavigationAgent
+from agents.popup_handler_agent import PopupHandlerAgent
+from utils.helpers import (
+    wait_and_click, human_type, random_delay,
+    safe_click, scroll_into_view_and_click
+)
+
+
+class RenewalAgent:
+
+    def __init__(self, page: Page, config, logger):
+        self.page = page
+        self.config = config
+        self.logger = logger
+        self._nav = NavigationAgent(page, config, logger)
+        self._popup = PopupHandlerAgent(page, config, logger)
+
+    # ── Public entry point ────────────────────────────────────────────────
+
+    async def renew_box(self, box_number: str) -> bool:
+        """
+        Run the full renewal workflow for one box.
+        Retries up to renewal_max_retries times on failure.
+        Returns True if renewed successfully.
+        """
+        for attempt in range(1, self.config.renewal_max_retries + 2):
+            self.logger.info(
+                f"[RENEWAL][{box_number}] Attempt {attempt}/"
+                f"{self.config.renewal_max_retries + 1}"
+            )
+            try:
+                success = await self._run_renewal_steps(box_number)
+                if success:
+                    self.logger.log_box_result(box_number, True)
+                    return True
+            except Exception as e:
+                self.logger.error(
+                    f"[RENEWAL][{box_number}] Exception on attempt {attempt}: {e}",
+                    exc_info=True
+                )
+
+            if attempt <= self.config.renewal_max_retries:
+                self.logger.warning(f"[RENEWAL][{box_number}] Retrying — going back to search...")
+                await self._nav.go_back_to_search()
+                await random_delay(2.0, 3.5)
+            else:
+                self.logger.log_box_result(box_number, False, "Exceeded retry limit")
+
+        return False
+
+    # ── Step orchestrator ─────────────────────────────────────────────────
+
+    async def _run_renewal_steps(self, box_number: str) -> bool:
+        """Execute all renewal steps in sequence. Returns True on success."""
+
+        # Step A — Search
+        if not await self._step_search(box_number):
+            self.logger.error(f"[RENEWAL][{box_number}] STEP A (Search) failed")
+            return False
+
+        await self._popup.dismiss_popups_if_present()
+
+        # Step B — Select Main TV
+        if not await self._step_select_main_tv(box_number):
+            self.logger.error(f"[RENEWAL][{box_number}] STEP B (Main TV) failed")
+            return False
+
+        # Step C — Add Plan
+        if not await self._step_add_plan(box_number):
+            self.logger.error(f"[RENEWAL][{box_number}] STEP C (Add Plan) failed")
+            return False
+
+        # Step D — Hathway Bouquet
+        if not await self._step_select_bouquet(box_number):
+            self.logger.error(f"[RENEWAL][{box_number}] STEP D (Bouquet) failed")
+            return False
+
+        # Step E — Select plan
+        if not await self._step_select_plan(box_number):
+            self.logger.error(f"[RENEWAL][{box_number}] STEP E (Plan select) failed")
+            return False
+
+        # Step F — Submit (reliable force-click)
+        if not await self._step_submit(box_number):
+            self.logger.error(f"[RENEWAL][{box_number}] STEP F (Submit) failed")
+            return False
+
+        # Step G — Confirm
+        if not await self._step_confirm(box_number):
+            self.logger.error(f"[RENEWAL][{box_number}] STEP G (Confirm) failed")
+            return False
+
+        # Step H — OK (final dialog)
+        success = await self._step_ok(box_number)
+        self.logger.log_step(box_number, "H-OK", success)
+        return success
+
+    # ── Individual steps ──────────────────────────────────────────────────
+
+    async def _step_search(self, box_number: str) -> bool:
+        """Enter box number in search bar and submit."""
+        self.logger.info(f"[RENEWAL][{box_number}] STEP A: Searching...")
+        try:
+            search_box = await self.page.wait_for_selector(
+                self.config.sel_search_box,
+                timeout=self.config.element_timeout
+            )
+            if not search_box:
+                raise RuntimeError("Search box not found")
+
+            await search_box.triple_click()
+            await asyncio.sleep(0.2)
+            await human_type(self.page, self.config.sel_search_box, box_number)
+            await random_delay(0.5, 1.0)
+
+            clicked = await wait_and_click(
+                self.page, self.config.sel_search_button, self.config
+            )
+            if not clicked:
+                await self.page.keyboard.press("Enter")
+
+            await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
+            await random_delay(1.0, 2.0)
+
+            self.logger.log_step(box_number, "A-SEARCH", True)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP A exception: {e}")
+            self.logger.log_step(box_number, "A-SEARCH", False, str(e))
+            return False
+
+    async def _step_select_main_tv(self, box_number: str) -> bool:
+        """Click on 'Main TV' in the results."""
+        self.logger.info(f"[RENEWAL][{box_number}] STEP B: Selecting Main TV...")
+        try:
+            await asyncio.sleep(1.0)
+
+            clicked = await scroll_into_view_and_click(
+                self.page, self.config.sel_main_tv_link, self.config
+            )
+            if not clicked:
+                clicked = await safe_click(
+                    self.page, "text=Main TV", timeout=self.config.element_timeout
+                )
+            if not clicked:
+                raise RuntimeError("'Main TV' link not found in results")
+
+            await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
+            await random_delay(1.0, 1.8)
+
+            self.logger.log_step(box_number, "B-MAIN-TV", True)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP B exception: {e}")
+            self.logger.log_step(box_number, "B-MAIN-TV", False, str(e))
+            return False
+
+    async def _step_add_plan(self, box_number: str) -> bool:
+        """Click the 'Add Plan' button."""
+        self.logger.info(f"[RENEWAL][{box_number}] STEP C: Clicking Add Plan...")
+        try:
+            clicked = await scroll_into_view_and_click(
+                self.page, self.config.sel_add_plan_button, self.config
+            )
+            if not clicked:
+                raise RuntimeError("'Add Plan' button not found")
+
+            await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
+            await random_delay(1.0, 1.8)
+
+            self.logger.log_step(box_number, "C-ADD-PLAN", True)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP C exception: {e}")
+            self.logger.log_step(box_number, "C-ADD-PLAN", False, str(e))
+            return False
+
+    async def _step_select_bouquet(self, box_number: str) -> bool:
+        """Click 'Hathway Bouquet' from the bouquet list."""
+        self.logger.info(f"[RENEWAL][{box_number}] STEP D: Selecting Hathway Bouquet...")
+        try:
+            clicked = await scroll_into_view_and_click(
+                self.page, self.config.sel_hathway_bouquet, self.config
+            )
+            if not clicked:
+                raise RuntimeError("'Hathway Bouquet' not found")
+
+            await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
+            await random_delay(1.0, 1.8)
+
+            self.logger.log_step(box_number, "D-BOUQUET", True)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP D exception: {e}")
+            self.logger.log_step(box_number, "D-BOUQUET", False, str(e))
+            return False
+
+    async def _step_select_plan(self, box_number: str) -> bool:
+        """Find and select the target plan from the plan list."""
+        self.logger.info(
+            f"[RENEWAL][{box_number}] STEP E: Selecting plan '{self.config.target_plan_name}'..."
+        )
+        try:
+            plan_name = self.config.target_plan_name
+            plan_row_sel = f"tr:has-text('{plan_name}')"
+            plan_row = await self.page.wait_for_selector(
+                plan_row_sel, timeout=self.config.element_timeout
+            )
+
+            if plan_row:
+                await plan_row.scroll_into_view_if_needed()
+                await asyncio.sleep(0.4)
+                select_btn = await plan_row.query_selector(
+                    "button, a, input[type='button'], input[type='submit']"
+                )
+                if select_btn:
+                    await select_btn.click()
+                    await asyncio.sleep(1.0)
+                    self.logger.log_step(box_number, "E-PLAN-SELECT", True)
+                    return True
+
+            clicked = await safe_click(
+                self.page, f"text={plan_name}", timeout=self.config.element_timeout
+            )
+            if clicked:
+                await asyncio.sleep(1.0)
+                self.logger.log_step(box_number, "E-PLAN-SELECT", True)
+                return True
+
+            raise RuntimeError(f"Plan '{plan_name}' not found in plan list")
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP E exception: {e}")
+            self.logger.log_step(box_number, "E-PLAN-SELECT", False, str(e))
+            return False
+
+    async def _step_submit(self, box_number: str) -> bool:
+        """
+        Click the Submit button using multiple strategies to ensure it
+        actually fires, not just appears clicked.
+        """
+        self.logger.info(f"[RENEWAL][{box_number}] STEP F: Clicking Submit...")
+
+        submit_selectors = [
+            "input[type='submit']",
+            "button[type='submit']",
+            "input[value='Submit']",
+            "button:has-text('Submit')",
+            "a:has-text('Submit')",
+            "#btnSubmit",
+            "input[id*='Submit']",
+            "button[id*='Submit']",
+        ]
+
+        try:
+            # Wait for page to settle before looking for Submit
+            await asyncio.sleep(1.0)
+
+            el = None
+            used_sel = None
+
+            # Find the first visible Submit element
+            for sel in submit_selectors:
+                try:
+                    candidate = await self.page.wait_for_selector(
+                        sel, timeout=3_000, state="visible"
+                    )
+                    if candidate and await candidate.is_visible():
+                        el = candidate
+                        used_sel = sel
+                        break
+                except Exception:
+                    continue
+
+            if not el:
+                raise RuntimeError("Submit button not found with any known selector")
+
+            self.logger.debug(f"[RENEWAL][{box_number}] Submit found via: {used_sel}")
+
+            # Scroll into view
+            await el.scroll_into_view_if_needed()
+            await asyncio.sleep(0.5)
+
+            # Strategy 1: standard Playwright click
+            try:
+                await el.click(timeout=5_000, force=False)
+                self.logger.debug(f"[RENEWAL][{box_number}] Submit clicked (standard)")
+            except Exception:
+                # Strategy 2: force=True (bypasses pointer-events checks)
+                try:
+                    await el.click(timeout=5_000, force=True)
+                    self.logger.debug(f"[RENEWAL][{box_number}] Submit clicked (force=True)")
+                except Exception:
+                    # Strategy 3: JavaScript click (always fires regardless of overlays)
+                    await self.page.evaluate("el => el.click()", el)
+                    self.logger.debug(f"[RENEWAL][{box_number}] Submit clicked (JS fallback)")
+
+            # Wait for the page to react
+            try:
+                await self.page.wait_for_load_state(
+                    "networkidle", timeout=self.config.page_load_timeout
+                )
+            except Exception:
+                await asyncio.sleep(2.0)
+
+            await random_delay(1.0, 2.0)
+            self.logger.log_step(box_number, "F-SUBMIT", True)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP F exception: {e}")
+            self.logger.log_step(box_number, "F-SUBMIT", False, str(e))
+            return False
+
+    async def _step_confirm(self, box_number: str) -> bool:
+        """
+        Click the Confirm button that appears after Submit.
+        Waits for it to become visible first.
+        """
+        self.logger.info(f"[RENEWAL][{box_number}] STEP G: Clicking Confirm...")
+
+        confirm_selectors = [
+            "button:has-text('Confirm')",
+            "input[value='Confirm']",
+            "a:has-text('Confirm')",
+            "#btnConfirm",
+            "input[id*='Confirm']",
+            "button[id*='Confirm']",
+        ]
+
+        try:
+            await asyncio.sleep(1.0)
+
+            el = None
+            used_sel = None
+
+            for sel in confirm_selectors:
+                try:
+                    candidate = await self.page.wait_for_selector(
+                        sel, timeout=self.config.element_timeout, state="visible"
+                    )
+                    if candidate and await candidate.is_visible():
+                        el = candidate
+                        used_sel = sel
+                        break
+                except Exception:
+                    continue
+
+            if not el:
+                raise RuntimeError("Confirm button not found")
+
+            self.logger.debug(f"[RENEWAL][{box_number}] Confirm found via: {used_sel}")
+
+            await el.scroll_into_view_if_needed()
+            await asyncio.sleep(0.5)
+
+            try:
+                await el.click(timeout=5_000, force=False)
+                self.logger.debug(f"[RENEWAL][{box_number}] Confirm clicked (standard)")
+            except Exception:
+                try:
+                    await el.click(timeout=5_000, force=True)
+                    self.logger.debug(f"[RENEWAL][{box_number}] Confirm clicked (force=True)")
+                except Exception:
+                    await self.page.evaluate("el => el.click()", el)
+                    self.logger.debug(f"[RENEWAL][{box_number}] Confirm clicked (JS fallback)")
+
+            try:
+                await self.page.wait_for_load_state(
+                    "networkidle", timeout=self.config.page_load_timeout
+                )
+            except Exception:
+                await asyncio.sleep(2.0)
+
+            await random_delay(1.0, 1.5)
+            self.logger.log_step(box_number, "G-CONFIRM", True)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP G exception: {e}")
+            self.logger.log_step(box_number, "G-CONFIRM", False, str(e))
+            return False
+
+    async def _step_ok(self, box_number: str) -> bool:
+        """
+        Click the final OK button/dialog to complete the renewal.
+        Handles both native browser dialogs and page-level OK buttons.
+        """
+        self.logger.info(f"[RENEWAL][{box_number}] STEP H: Clicking OK...")
+
+        ok_selectors = [
+            "button:has-text('OK')",
+            "button:has-text('Ok')",
+            "input[value='OK']",
+            "input[value='Ok']",
+            "a:has-text('OK')",
+            "#btnOK",
+            "#btnOk",
+            "button[id*='Ok']",
+            "button[id*='OK']",
+        ]
+
+        try:
+            await asyncio.sleep(1.0)
+
+            # Handle native browser alert/confirm dialog first
+            try:
+                async def _accept_dialog(dialog):
+                    self.logger.info(
+                        f"[RENEWAL][{box_number}] Native dialog: '{dialog.message[:80]}' → accepting"
+                    )
+                    await dialog.accept()
+
+                self.page.once("dialog", _accept_dialog)
+                await asyncio.sleep(1.0)
+            except Exception:
+                pass
+
+            # Also try page-level OK button
+            el = None
+            used_sel = None
+
+            for sel in ok_selectors:
+                try:
+                    candidate = await self.page.wait_for_selector(
+                        sel, timeout=5_000, state="visible"
+                    )
+                    if candidate and await candidate.is_visible():
+                        el = candidate
+                        used_sel = sel
+                        break
+                except Exception:
+                    continue
+
+            if el:
+                self.logger.debug(f"[RENEWAL][{box_number}] OK found via: {used_sel}")
+                await el.scroll_into_view_if_needed()
+                await asyncio.sleep(0.3)
+
+                try:
+                    await el.click(timeout=5_000, force=False)
+                except Exception:
+                    try:
+                        await el.click(timeout=5_000, force=True)
+                    except Exception:
+                        await self.page.evaluate("el => el.click()", el)
+
+                self.logger.debug(f"[RENEWAL][{box_number}] OK clicked")
+            else:
+                # No explicit OK button — dialog may have already been handled above
+                self.logger.debug(
+                    f"[RENEWAL][{box_number}] No OK button found — may have been a native dialog"
+                )
+
+            try:
+                await self.page.wait_for_load_state(
+                    "networkidle", timeout=self.config.page_load_timeout
+                )
+            except Exception:
+                await asyncio.sleep(2.0)
+
+            await random_delay(1.0, 1.5)
+            self.logger.log_step(box_number, "H-OK", True)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"[RENEWAL][{box_number}] STEP H exception: {e}")
+            self.logger.log_step(box_number, "H-OK", False, str(e))
+            return False
