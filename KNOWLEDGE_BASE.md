@@ -26,19 +26,24 @@ The system follows a **Multi-Agent Design** where each agent is responsible for 
 **Solution**: Always use `.filter(visible=True)` or the `:visible` pseudo-class.
 **Learning**: If `locator.count()` is high but `click()` times out, it's almost certainly because Playwright is picking a hidden element first.
 
-## 🛡️ Self-Healing Automation System (The "Smart" Layer)
+## 🛡️ Full-Stack Self-Healing Automation (The "Smart" Layer)
 
-A major evolution in this project is the addition of a **Self-Healing Engine** that prevents breakage when the portal's UI (IDs, Classes, or structure) changes slightly.
+The entire application is now protected by a **Self-Healing Engine** that prevents breakage when the portal's UI (IDs, Classes, or structure) changes.
+
+### Coverage Area:
+- **Login & CAPTCHA**: Secure from the start with self-healing credentials and image detection.
+- **Navigation & Search**: Robust menu and searching layers.
+- **Renewal Flow**: Every critical checkbox and button in the 7-step renewal process.
+- **Popups**: Ad-skipping and modal dismissal.
 
 ### The "Heal" Cycle:
-1. **Attempt Stored**: The system tries 1-5 prioritized selectors for a logical key (e.g., `ok_button`).
-2. **Semantic Recovery**: If all fail, the system uses Playwright's semantic locators (`get_by_role`, `get_by_text`). This is slow but very robust.
-3. **Feature Discovery & Re-Learning**: Upon a successful recovery, the engine inspects the found element's DOM properties and generates a new "Stable" CSS selector.
-4. **Persistence**: The new selector is pushed to the top of `selectors.json`, making subsequent runs fast again.
+1. **Attempt Stored**: Tries prioritized selectors for a logical key (e.g., `ok_button`).
+2. **Semantic Recovery**: If code-based selectors fail, it uses Playwright's semantic locators (`get_by_role`, `get_by_text`).
+3. **Auto-Learning**: Inspects the recovered element and updates `selectors.json` with a new "Stable" CSS selector.
 
 ### Key Files:
-- **`utils/self_healing.py`**: Contains the `SelectorStore` and `SelfHealingEngine`.
-- **`selectors.json`**: The shared, persistent database of selectors.
+- **`utils/self_healing.py`**: The core execution engine.
+- **`selectors.json`**: The persistent "brain" of the automation.
 
 - **Timeout on Confirm**: Usually means a secondary popup is blocking the main button or multiple hidden buttons exist.
 - **Login Loop**: Often caused by the portal's "Max session reached" error or incorrect CAPTCHA OCR. Added a 5x retry loop in `LoginAgent`.
