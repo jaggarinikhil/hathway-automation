@@ -14,6 +14,7 @@ import asyncio
 from playwright.async_api import Page
 from agents.captcha_agent import CaptchaAgent
 from utils.helpers import human_type, random_delay, wait_and_click
+from utils.self_healing import SelectorStore, SelfHealingEngine
 
 
 class LoginAgent:
@@ -23,6 +24,8 @@ class LoginAgent:
         self.config = config
         self.logger = logger
         self.captcha_agent = CaptchaAgent(page, config, logger)
+        self._store = SelectorStore(config.selector_store_path)
+        self._healer = SelfHealingEngine(self._store, logger)
 
     async def login(self) -> bool:
         """
@@ -71,14 +74,17 @@ class LoginAgent:
         """Fill credentials + CAPTCHA and submit. Returns True if login succeeded."""
 
         # Fill username
-        await self.page.wait_for_selector(
-            self.config.sel_username, timeout=self.config.element_timeout
-        )
-        await human_type(self.page, self.config.sel_username, self.config.username)
+        username_loc = await self._healer.smart_locator(self.page, "username_input")
+        if not username_loc:
+            raise RuntimeError("Username input not found")
+        await human_type(self.page, username_loc, self.config.username)
         await random_delay(0.3, 0.7)
 
         # Fill password
-        await human_type(self.page, self.config.sel_password, self.config.password)
+        password_loc = await self._healer.smart_locator(self.page, "password_input")
+        if not password_loc:
+            raise RuntimeError("Password input not found")
+        await human_type(self.page, password_loc, self.config.password)
         await random_delay(0.3, 0.7)
 
         # Solve CAPTCHA
@@ -89,11 +95,12 @@ class LoginAgent:
             self.logger.warning("[LOGIN] Empty CAPTCHA result — will retry")
             return False
 
-        await human_type(self.page, self.config.sel_captcha_input, captcha_value)
+        captcha_loc = await self._healer.smart_locator(self.page, "captcha_input")
+        await human_type(self.page, captcha_loc, captcha_value)
         await random_delay(0.4, 0.9)
 
         # Submit
-        await wait_and_click(self.page, self.config.sel_login_button, self.config)
+        await self._healer.smart_click(self.page, "login_button")
         await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
 
         return await self._is_logged_in()
@@ -106,9 +113,8 @@ class LoginAgent:
         if "login.aspx" in current_url:
             # Check for explicit error message
             try:
-                err_el = await self.page.wait_for_selector(
-                    self.config.sel_login_error,
-                    timeout=self.config.short_timeout
+                err_el = await self._healer.smart_locator(
+                    self.page, "login_error_msg", timeout=self.config.short_timeout
                 )
                 if err_el:
                     err_text = await err_el.inner_text()
@@ -126,13 +132,13 @@ class LoginAgent:
 
     async def _clear_login_form(self):
         """Clear all login fields for a fresh retry."""
-        for sel in [
-            self.config.sel_username,
-            self.config.sel_password,
-            self.config.sel_captcha_input
+        for key in [
+            "username_input",
+            "password_input",
+            "captcha_input"
         ]:
             try:
-                el = await self.page.query_selector(sel)
+                el = await self._healer.smart_locator(self.page, key)
                 if el:
                     await el.click(click_count=3)
                     await self.page.keyboard.press("Delete")

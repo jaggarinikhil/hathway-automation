@@ -11,6 +11,7 @@ Handles:
 import asyncio
 from playwright.async_api import Page
 from utils.helpers import safe_click, random_delay
+from utils.self_healing import SelectorStore, SelfHealingEngine
 
 
 class PopupHandlerAgent:
@@ -33,6 +34,8 @@ class PopupHandlerAgent:
         self.page = page
         self.config = config
         self.logger = logger
+        self._store = SelectorStore(config.selector_store_path)
+        self._healer = SelfHealingEngine(self._store, logger)
         self._register_dialog_handler()
 
     # ── Public ────────────────────────────────────────────────────────────
@@ -76,14 +79,9 @@ class PopupHandlerAgent:
     async def _dismiss_skip_ad(self):
         """Click 'Skip' button/link if an ad overlay is present."""
         try:
-            skip_el = await self.page.wait_for_selector(
-                self.config.sel_skip_ad,
-                timeout=self.config.short_timeout
-            )
-            if skip_el and await skip_el.is_visible():
-                await skip_el.click()
-                await asyncio.sleep(0.8)
+            if await self._healer.smart_click(self.page, "skip_ad_button", timeout=3000):
                 self.logger.info("[POPUP] Ad 'Skip' clicked")
+                await asyncio.sleep(0.8)
         except Exception:
             self.logger.debug("[POPUP] No 'Skip' ad found (OK)")
 
@@ -93,19 +91,14 @@ class PopupHandlerAgent:
         via the ✕ button.
         """
         try:
-            popup = await self.page.wait_for_selector(
-                self.config.sel_stb_popup,
-                timeout=self.config.short_timeout
-            )
+            popup = await self._healer.smart_locator(self.page, "stb_popup", timeout=self.config.short_timeout)
             if not popup or not await popup.is_visible():
                 return
 
             self.logger.info("[POPUP] STB acceptance popup detected — closing...")
 
-            # Try the configured close selector first
-            closed = await safe_click(
-                self.page, self.config.sel_close_stb_popup, timeout=5_000
-            )
+            # Try the configured close selector via healer
+            closed = await self._healer.smart_click(self.page, "stb_popup_close", timeout=5000)
 
             if not closed:
                 # Fallback: generic close buttons

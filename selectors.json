@@ -1,12 +1,66 @@
 {
-  "search_box": ["#MasterBody_txtSearchParam"],
-  "search_button": ["#MasterBody_btnSearch"],
-  "main_tv_link": ["#MasterBody_lnkAddon1", "a:has-text('Main TV')"],
-  "add_plan_button": ["#MasterBody_btnOpenAddPopup", "button:has-text('Add Plan')"],
-  "hathway_bouquet": ["#MasterBody_radhwayspecial"],
-  "add_button": ["#MasterBody_btnAddPlan"],
-  "confirm_button": [":is(button:has-text('Confirm'), #btnConfirm, #MasterBody_btnaddplanConfirm):visible"],
-  "ok_button": [":is(button:has-text('OK'), #btnOK):visible"],
-  "pack_management": [":is(#MasterBody_imgPackManagement, a:has-text('Pack Management')):visible"],
-  "stb_popup_close": [":is(a.ui-dialog-titlebar-close, img[src*='close']):visible"]
+  "search_box": [
+    "#MasterBody_txtSearchParam"
+  ],
+  "search_button": [
+    "#MasterBody_btnSearch"
+  ],
+  "main_tv_link": [
+    "#MasterBody_lnkAddon1",
+    "a:has-text('Main TV')"
+  ],
+  "add_plan_button": [
+    "#MasterBody_btnOpenAddPopup",
+    "button:has-text('Add Plan')"
+  ],
+  "stb_popup": [
+    ".modal",
+    "#divPopup",
+    "[id*='popup']",
+    "[id*='Popup']"
+  ],
+  "hathway_bouquet": [
+    "#MasterBody_radhwayspecial"
+  ],
+  "add_button": [
+    "#MasterBody_btnAddPlan"
+  ],
+  "confirm_button": [
+    ":is(button:has-text('Confirm'), #btnConfirm, #MasterBody_btnaddplanConfirm):visible"
+  ],
+  "ok_button": [
+    ":is(button:has-text('OK'), #btnOK):visible"
+  ],
+  "pack_management": [
+    ":is(#MasterBody_imgPackManagement, a:has-text('Pack Management')):visible"
+  ],
+  "stb_popup_close": [
+    ":is(a.ui-dialog-titlebar-close, img[src*='close']):visible"
+  ],
+  "username_input": [
+    "#txtUsername"
+  ],
+  "password_input": [
+    "#txtPassword"
+  ],
+  "captcha_input": [
+    "#txtcaptcha"
+  ],
+  "login_button": [
+    "#ibtLogIn"
+  ],
+  "captcha_image": [
+    "#imgCaptcha"
+  ],
+  "add_plan_action_button": [
+    "#MasterBody_btnAddPlan"
+  ],
+  "skip_ad_button": [
+    ":is(button:has-text('Skip'), a:has-text('Skip'), #btnSkip):visible"
+  ],
+  "login_error_msg": [
+    ".error-message",
+    "#lblError",
+    ".alert-danger"
+  ]
 }

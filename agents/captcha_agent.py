@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Optional
 
 from playwright.async_api import Page
+from utils.self_healing import SelectorStore, SelfHealingEngine
 
 try:
     from PIL import Image, ImageFilter, ImageEnhance, ImageOps
@@ -41,6 +42,8 @@ class CaptchaAgent:
         self.logger = logger
         self._debug_dir = Path(config.captcha_debug_dir)
         self._debug_dir.mkdir(exist_ok=True)
+        self._store = SelectorStore(config.selector_store_path)
+        self._healer = SelfHealingEngine(self._store, logger)
 
         if not OCR_AVAILABLE:
             self.logger.warning(
@@ -98,10 +101,7 @@ class CaptchaAgent:
     async def _screenshot_captcha(self) -> Optional[bytes]:
         """Return raw PNG bytes of the CAPTCHA element."""
         try:
-            el = await self.page.wait_for_selector(
-                self.config.sel_captcha_image,
-                timeout=self.config.element_timeout
-            )
+            el = await self._healer.smart_locator(self.page, "captcha_image")
             if not el:
                 self.logger.error("[CAPTCHA] Element not found")
                 return None

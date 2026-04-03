@@ -131,7 +131,7 @@ class RenewalAgent:
             await self.page.keyboard.press("Backspace")
             
             await asyncio.sleep(0.2)
-            await human_type(self.page, "search_box", box_number)
+            await human_type(self.page, search_box, box_number)
             await random_delay(0.5, 1.0)
 
             clicked = await self._healer.smart_click(self.page, "search_button")
@@ -209,21 +209,16 @@ class RenewalAgent:
             return False
 
     async def _step_select_bouquet(self, box_number: str) -> bool:
-        """Click 'Hathway Bouquet' from the bouquet list."""
-        self.logger.info(f"[RENEWAL][{box_number}] STEP D: Selecting Hathway Bouquet...")
+        """Click 'Hathway Bouquet' radio/button."""
+        self.logger.info(f"[RENEWAL][{box_number}] STEP D: Selecting Bouquet...")
         try:
-            clicked = await scroll_into_view_and_click(
-                self.page, self.config.sel_hathway_bouquet, self.config
-            )
-            if not clicked:
-                raise RuntimeError("'Hathway Bouquet' not found")
+            success = await self._healer.smart_click(self.page, "hathway_bouquet")
+            if not success:
+                raise RuntimeError("Bouquet selector not found")
 
-            await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
-            await random_delay(1.0, 1.8)
-
+            await asyncio.sleep(0.8)
             self.logger.log_step(box_number, "D-BOUQUET", True)
             return True
-
         except Exception as e:
             self.logger.error(f"[RENEWAL][{box_number}] STEP D exception: {e}")
             self.logger.log_step(box_number, "D-BOUQUET", False, str(e))
