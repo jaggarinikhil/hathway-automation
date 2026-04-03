@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+config.json
+*.log
+captcha_debug/
+.DS_Store
+.vscode/
+.idea/
+*.zip
+Launch Hathway Renewal.app/
