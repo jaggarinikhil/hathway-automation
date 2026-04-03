@@ -4,8 +4,12 @@ from typing import Optional
 from playwright.async_api import Page
 
 
-async def human_type(page: Page, selector: str, text: str, clear: bool = True):
-    el = await page.wait_for_selector(selector, timeout=15_000)
+async def human_type(page: Page, selector_or_loc, text: str, clear: bool = True):
+    if isinstance(selector_or_loc, str):
+        el = await page.wait_for_selector(selector_or_loc, timeout=15_000)
+    else:
+        el = selector_or_loc
+
     if el:
         if clear:
             await el.click(click_count=3)

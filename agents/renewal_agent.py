@@ -20,6 +20,7 @@ from utils.helpers import (
     wait_and_click, human_type, random_delay,
     safe_click, scroll_into_view_and_click
 )
+from utils.self_healing import SelectorStore, SelfHealingEngine
 
 
 class RenewalAgent:
@@ -30,6 +31,10 @@ class RenewalAgent:
         self.logger = logger
         self._nav = NavigationAgent(page, config, logger)
         self._popup = PopupHandlerAgent(page, config, logger)
+        
+        # Initialize Self-Healing Engine
+        self._store = SelectorStore(config.selector_store_path)
+        self._healer = SelfHealingEngine(self._store, logger)
 
     # ── Public entry point ────────────────────────────────────────────────
 
@@ -117,28 +122,19 @@ class RenewalAgent:
         """Enter box number in search bar and submit. Clears previous input first."""
         self.logger.info(f"[RENEWAL][{box_number}] STEP A: Searching...")
         try:
-            search_box = await self.page.wait_for_selector(
-                self.config.sel_search_box,
-                timeout=self.config.element_timeout
-            )
+            search_box = await self._healer.smart_locator(self.page, "search_box")
             if not search_box:
                 raise RuntimeError("Search box not found")
 
             # Reliable clear
             await search_box.click(click_count=3)
             await self.page.keyboard.press("Backspace")
-            # If still not clear, use evaluate
-            await self.page.evaluate(
-                f"document.querySelector('{self.config.sel_search_box}').value = ''"
-            )
             
             await asyncio.sleep(0.2)
-            await human_type(self.page, self.config.sel_search_box, box_number)
+            await human_type(self.page, "search_box", box_number)
             await random_delay(0.5, 1.0)
 
-            clicked = await wait_and_click(
-                self.page, self.config.sel_search_button, self.config
-            )
+            clicked = await self._healer.smart_click(self.page, "search_button")
             if not clicked:
                 await self.page.keyboard.press("Enter")
 
@@ -154,19 +150,16 @@ class RenewalAgent:
             return False
 
     async def _step_select_main_tv(self, box_number: str) -> bool:
-        """Click on 'Main TV' in the results. Uses JS fallback for robustness."""
+        """Click on 'Main TV' in the results. Uses self-healing for robustness."""
         self.logger.info(f"[RENEWAL][{box_number}] STEP B: Selecting Main TV...")
         try:
             await asyncio.sleep(1.5)
 
-            # Strategy 1: Targeted selector from config
-            clicked = await scroll_into_view_and_click(
-                self.page, self.config.sel_main_tv_link, self.config
-            )
+            clicked = await self._healer.smart_click(self.page, "main_tv_link")
             
-            # Strategy 2: Search for 'Main TV' text via JS (very reliable)
             if not clicked:
-                self.logger.debug(f"[RENEWAL][{box_number}] Standard click failed, trying JS click for 'Main TV'...")
+                # Strategy 2: Search for 'Main TV' text via JS (fallback)
+                self.logger.debug(f"[RENEWAL][{box_number}] smart_click failed, trying JS click for 'Main TV'...")
                 clicked = await self.page.evaluate("""
                     () => {
                         var links = document.querySelectorAll('a, span');
@@ -200,10 +193,8 @@ class RenewalAgent:
         """Click the 'Add Plan' button."""
         self.logger.info(f"[RENEWAL][{box_number}] STEP C: Clicking Add Plan...")
         try:
-            clicked = await scroll_into_view_and_click(
-                self.page, self.config.sel_add_plan_button, self.config
-            )
-            if not clicked:
+            success = await self._healer.smart_click(self.page, "add_plan_button")
+            if not success:
                 raise RuntimeError("'Add Plan' button not found")
 
             await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
@@ -428,57 +419,23 @@ class RenewalAgent:
         """
         self.logger.info(f"[RENEWAL][{box_number}] STEP G: Clicking Confirm...")
 
-        confirm_selectors = [
-            "button:has-text('Confirm')",
-            "input[value='Confirm']",
-            "a:has-text('Confirm')",
-            "#btnConfirm",
-            "input[id*='Confirm']",
-            "button[id*='Confirm']",
-            self.config.sel_confirm_button,
-        ]
-        combined_sel = ", ".join(confirm_selectors)
-
         try:
-            # Combined selector with visibility filter to avoid hidden buttons
-            # We use '>> visible=true' to ensure we only get the active button
-            visible_sel = f"{combined_sel}"
+            success = await self._healer.smart_click(self.page, "confirm_button")
             
-            try:
-                # locator.first.click() will wait for visibility but fails if the first is hidden
-                # so we use a selector that only matches visible ones
-                el = await self.page.wait_for_selector(
-                    f":is({combined_sel}):visible", 
-                    timeout=self.config.element_timeout
-                )
-            except Exception:
-                # Last resort: just try the first match even if hidden, maybe it will appear
-                el = await self.page.wait_for_selector(
-                    combined_sel, 
-                    timeout=5000
-                )
+            if not success:
+                # Fallback to older logic if smart_click fails completely
+                confirm_selectors = [
+                    "button:has-text('Confirm')",
+                    "input[value='Confirm']",
+                    "#MasterBody_btnaddplanConfirm",
+                ]
+                for sel in confirm_selectors:
+                    if await safe_click(self.page, sel, timeout=3000):
+                        success = True
+                        break
 
-            if not el:
+            if not success:
                 raise RuntimeError("Confirm button not found or not visible")
-
-            await el.scroll_into_view_if_needed()
-            await asyncio.sleep(0.3)
-
-            try:
-                await el.click(timeout=3_000, force=False)
-            except Exception:
-                try:
-                    await el.click(timeout=3_000, force=True)
-                except Exception:
-                    # Final JS click fallback - must use a handle
-                    handle = await el.element_handle() if hasattr(el, 'element_handle') else el
-                    await self.page.evaluate("el => el.click()", handle)
-
-            # Minimal wait - the OK step will wait for the final dialog anyway
-            try:
-                await self.page.wait_for_load_state("load", timeout=5000)
-            except Exception:
-                pass
 
             await asyncio.sleep(0.5)
             self.logger.log_step(box_number, "G-CONFIRM", True)
@@ -496,19 +453,6 @@ class RenewalAgent:
         """
         self.logger.info(f"[RENEWAL][{box_number}] STEP H: Clicking OK...")
 
-        ok_selectors = [
-            "button:has-text('OK')",
-            "button:has-text('Ok')",
-            "input[value='OK']",
-            "input[value='Ok']",
-            "a:has-text('OK')",
-            "#btnOK",
-            "#btnOk",
-            "button[id*='Ok']",
-            "button[id*='OK']",
-        ]
-        combined_sel = ", ".join(ok_selectors)
-
         try:
             # Quick check for native dialog first
             try:
@@ -520,19 +464,10 @@ class RenewalAgent:
             except Exception:
                 pass
 
-            # Search for OK button using combined selector with visibility check
-            el = await self.page.wait_for_selector(
-                f":is({combined_sel}):visible", 
-                timeout=5_000
-            )
+            # Search for OK button using smart_click
+            success = await self._healer.smart_click(self.page, "ok_button")
 
-            if el:
-                await el.scroll_into_view_if_needed()
-                await asyncio.sleep(0.2)
-                try:
-                    await el.click(timeout=3_000, force=True)
-                except Exception:
-                    await self.page.evaluate("el => el.click()", el)
+            if success:
                 self.logger.debug(f"[RENEWAL][{box_number}] OK clicked")
             else:
                 self.logger.debug(f"[RENEWAL][{box_number}] No OK button - likely native handled")

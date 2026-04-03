@@ -50,6 +50,7 @@ class Config:
     # ── Logging ───────────────────────────────────────────────────────────
     log_file: str = "hathway_automation.log"
     captcha_debug_dir: str = "captcha_debug"   # save captcha images here
+    selector_store_path: str = "selectors.json"
 
     # ── Selectors ─────────────────────────────────────────────────────────
     # Login page

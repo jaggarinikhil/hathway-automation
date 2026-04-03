@@ -26,13 +26,19 @@ The system follows a **Multi-Agent Design** where each agent is responsible for 
 **Solution**: Always use `.filter(visible=True)` or the `:visible` pseudo-class.
 **Learning**: If `locator.count()` is high but `click()` times out, it's almost certainly because Playwright is picking a hidden element first.
 
-## 🛠️ Deployment Insights
+## 🛡️ Self-Healing Automation System (The "Smart" Layer)
 
-- **Local Use**: The `.command` and `.app` launchers provide a user-friendly way to run the Python script without terminal knowledge.
-- **Cloud Use**: For server deployment, **Google Cloud Run** via Docker is the recommended path because it supports the Playwright/Chromium environment and Tesseract dependencies perfectly.
-- **GitHub**: Always use a `.gitignore` to protect `config.json` and `*.log` files to avoid leaking sensitive partner credentials.
+A major evolution in this project is the addition of a **Self-Healing Engine** that prevents breakage when the portal's UI (IDs, Classes, or structure) changes slightly.
 
-## 📝 Troubleshooting Log
+### The "Heal" Cycle:
+1. **Attempt Stored**: The system tries 1-5 prioritized selectors for a logical key (e.g., `ok_button`).
+2. **Semantic Recovery**: If all fail, the system uses Playwright's semantic locators (`get_by_role`, `get_by_text`). This is slow but very robust.
+3. **Feature Discovery & Re-Learning**: Upon a successful recovery, the engine inspects the found element's DOM properties and generates a new "Stable" CSS selector.
+4. **Persistence**: The new selector is pushed to the top of `selectors.json`, making subsequent runs fast again.
+
+### Key Files:
+- **`utils/self_healing.py`**: Contains the `SelectorStore` and `SelfHealingEngine`.
+- **`selectors.json`**: The shared, persistent database of selectors.
 
 - **Timeout on Confirm**: Usually means a secondary popup is blocking the main button or multiple hidden buttons exist.
 - **Login Loop**: Often caused by the portal's "Max session reached" error or incorrect CAPTCHA OCR. Added a 5x retry loop in `LoginAgent`.

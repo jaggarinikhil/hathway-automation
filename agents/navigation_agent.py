@@ -1,5 +1,6 @@
 import asyncio
 from utils.helpers import safe_click, random_delay
+from utils.self_healing import SelectorStore, SelfHealingEngine
 
 
 class NavigationAgent:
@@ -35,6 +36,8 @@ class NavigationAgent:
         self.page = page
         self.config = config
         self.logger = logger
+        self._store = SelectorStore(config.selector_store_path)
+        self._healer = SelfHealingEngine(self._store, logger)
 
     async def handle_post_login_slides(self):
         self.logger.info("[NAV] Handling post-login slideshows and popups...")
@@ -65,15 +68,7 @@ class NavigationAgent:
         await self._close_stb_popup()
 
         # Step 2: Click Pack Management from dashboard
-        pack_selectors = [
-            "#MasterBody_imgPackManagement",
-            "img[src*='Pack%20Management']",
-            "img[src*='Pack Management']",
-            "a:has-text('Pack Management')",
-            "td:has-text('Pack Management')",
-        ]
-        combined_sel = f":is({', '.join(pack_selectors)}):visible"
-        if await safe_click(self.page, combined_sel, timeout=5000):
+        if await self._healer.smart_click(self.page, "pack_management"):
             self.logger.info(f"[NAV] Clicked Pack Management")
             await asyncio.sleep(1.0)
 
@@ -99,21 +94,7 @@ class NavigationAgent:
         """Close the STB acceptance popup using the × circle button."""
         await asyncio.sleep(2.0)
 
-        stb_close_selectors = [
-            "a.ui-dialog-titlebar-close",
-            ".ui-dialog-titlebar-close",
-            "img[src*='closebtn']",
-            "img[src*='close']",
-            "img#imgclose",
-            "img#imgClose4",
-            "img#Image17",
-            "img#Image9",
-            "img#Image8",
-            "img#MasterBody_ImgPODArchive",
-        ]
-        combined_sel = f":is({', '.join(stb_close_selectors)}):visible"
-
-        if await safe_click(self.page, combined_sel, timeout=3000):
+        if await self._healer.smart_click(self.page, "stb_popup_close"):
             self.logger.info(f"[NAV] Closed STB popup")
             await asyncio.sleep(1.0)
             return
