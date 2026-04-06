@@ -29,7 +29,9 @@
     ":is(button:has-text('Confirm'), #btnConfirm, #MasterBody_btnaddplanConfirm):visible"
   ],
   "ok_button": [
-    ":is(button:has-text('OK'), #btnOK):visible"
+    ":is(button:has-text('OK'), button:has-text('Close'), button:has-text('Done'), button:has-text('Finish'), button:has-text('Back')):visible",
+    ":is(input[value='OK'], input[value='Close'], input[value='Done'], #btnOK, #btnClose):visible",
+    "a:has-text('Close'), a:has-text('OK')"
   ],
   "pack_management": [
     ":is(#MasterBody_imgPackManagement, a:has-text('Pack Management')):visible"

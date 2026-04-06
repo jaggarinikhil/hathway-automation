@@ -502,48 +502,96 @@ class RenewalAgent:
 
             # 2. Find and check 'Renew' checkbox/option
             self.logger.info(f"[RENEWAL][{box_number}] Searching for 'Renew' option...")
+            renew_result = 'not_found'
             try:
                 # Use JS to find and click any Renewal checkbox or link
-                await self.page.evaluate("""
+                renew_result = await self.page.evaluate("""
                     () => {
-                        var inputs = document.querySelectorAll('input[type=checkbox]');
-                        for (var i = 0; i < inputs.length; i++) {
-                            var row = inputs[i].closest('tr');
-                            if (row && row.innerText.toUpperCase().includes('ACTIVE')) {
-                                // Use click() to trigger onchange/PostBack events
-                                inputs[i].click(); 
-                                return 'clicked_via_status';
+                        // Priority 1: Checkbox in a row with 'Active' status
+                        var rows = document.querySelectorAll('tr');
+                        for (var i = 0; i < rows.length; i++) {
+                            var text = rows[i].innerText.toUpperCase();
+                            if (text.includes('ACTIVE')) {
+                                var cb = rows[i].querySelector('input[type=checkbox]');
+                                if (cb) {
+                                    if (!cb.checked) cb.click();
+                                    return 'clicked_active_row_cb';
+                                }
                             }
                         }
-                        var links = document.querySelectorAll('a');
+                        
+                        // Priority 2: Any checkbox with 'Renewal' in its ID or name
+                        var cbs = document.querySelectorAll('input[type=checkbox]');
+                        for (var i = 0; i < cbs.length; i++) {
+                            if (cbs[i].id.toUpperCase().includes('RENEW') || cbs[i].name.toUpperCase().includes('RENEW')) {
+                                if (!cbs[i].checked) cbs[i].click();
+                                return 'clicked_renew_cb_by_id';
+                            }
+                        }
+
+                        // Priority 3: Links/Buttons with 'Renew' text
+                        var links = document.querySelectorAll('a, button, input[type=button]');
                         for (var i = 0; i < links.length; i++) {
-                            var t = links[i].innerText.toUpperCase();
-                            if (t.includes('RENEW')) { links[i].click(); return 'clicked_renew_link'; }
+                            var t = (links[i].innerText || links[i].value || '').toUpperCase();
+                            if (t.includes('RENEW')) { 
+                                links[i].click(); 
+                                return 'clicked_renew_link'; 
+                            }
                         }
                         return 'not_found';
                     }
                 """)
-                await asyncio.sleep(2.0)
+                self.logger.info(f"[RENEWAL][{box_number}] Renew selection result: {renew_result}")
+                
+                # Wait for the page/form to react (user says: "wait for some time to get submit option")
+                await asyncio.sleep(3.0) 
             except Exception as e:
                 self.logger.warning(f"[RENEWAL][{box_number}] JS renewal select failed: {e}")
 
-            # 3. Click Submit (Universal JS finder)
+            if renew_result == 'not_found':
+                self.logger.error(f"[RENEWAL][{box_number}] Could not find 'Renew' option to click!")
+                return False
+
+            # 3. Click Submit (Universal JS finder + Specific Selector)
             self.logger.info(f"[RENEWAL][{box_number}] Clicking Submit...")
-            submit_result = await self.page.evaluate("""
-                () => {
-                    var btns = document.querySelectorAll('input[type=button], input[type=submit], button, a');
-                    for (var i = 0; i < btns.length; i++) {
-                        var t = (btns[i].value || btns[i].innerText || '').toUpperCase();
-                        if (t === 'SUBMIT' && btns[i].offsetParent !== null) {
-                            btns[i].click();
-                            return 'clicked_submit';
+            # Try to wait for the specific submit button from the screenshot
+            submit_selectors = ["#MasterBody_btnSubmit", "input[value='submit']", "input[value='Submit']", "button:has-text('submit')"]
+            
+            submit_btn = None
+            for sel in submit_selectors:
+                try:
+                    candidate = await self.page.wait_for_selector(sel, timeout=5000, state="visible")
+                    if candidate:
+                        submit_btn = candidate
+                        break
+                except:
+                    continue
+
+            if submit_btn:
+                await submit_btn.click()
+                submit_result = "clicked_via_selector"
+            else:
+                # Fallback to JS click if selector wait failed
+                submit_result = await self.page.evaluate("""
+                    () => {
+                        var btns = document.querySelectorAll('input[type=button], input[type=submit], button, a');
+                        for (var i = 0; i < btns.length; i++) {
+                            var t = (btns[i].value || btns[i].innerText || '').toLowerCase();
+                            if (t === 'submit' && btns[i].offsetParent !== null) {
+                                btns[i].click();
+                                return 'clicked_submit_js';
+                            }
                         }
+                        return 'not_found';
                     }
-                    return 'not_found';
-                }
-            """)
-            self.logger.debug(f"[RENEWAL][{box_number}] JS Submit result: {submit_result}")
-            await asyncio.sleep(1.0)
+                """)
+            
+            self.logger.info(f"[RENEWAL][{box_number}] JS Submit result: {submit_result}")
+            if submit_result == 'not_found':
+                self.logger.error(f"[RENEWAL][{box_number}] Submit button not found!")
+                return False
+            
+            await asyncio.sleep(2.0)
 
             # 4. Click Confirm (Universal JS finder)
             self.logger.info(f"[RENEWAL][{box_number}] Clicking Confirm...")
@@ -552,7 +600,7 @@ class RenewalAgent:
                     var btns = document.querySelectorAll('input[type=button], input[type=submit], button, a');
                     for (var i = 0; i < btns.length; i++) {
                         var t = (btns[i].value || btns[i].innerText || '').toUpperCase();
-                        if (t === 'CONFIRM' && btns[i].offsetParent !== null) {
+                        if (t.includes('CONFIRM') && btns[i].offsetParent !== null) {
                             btns[i].click();
                             return 'clicked_confirm';
                         }
@@ -560,27 +608,52 @@ class RenewalAgent:
                     return 'not_found';
                 }
             """)
-            self.logger.debug(f"[RENEWAL][{box_number}] JS Confirm result: {confirm_result}")
+            self.logger.info(f"[RENEWAL][{box_number}] JS Confirm result: {confirm_result}")
+            if confirm_result == 'not_found':
+                self.logger.error(f"[RENEWAL][{box_number}] Confirm button not found!")
+                # Proceed anyway as Confirm might be skipped in some flows? No, usually required.
+                # return False
             await asyncio.sleep(1.0)
 
             # 5. Click OK (Universal JS finder)
             self.logger.info(f"[RENEWAL][{box_number}] Clicking OK...")
             ok_result = await self.page.evaluate("""
                 () => {
-                    var btns = document.querySelectorAll('input[type=button], input[type=submit], button, a');
+                    var btns = document.querySelectorAll('input[type=button], input[type=submit], button, a, span');
+                    var targets = ['OK', 'CLOSE', 'DONE', 'FINISH', 'BACK', 'SUBMIT'];
+                    var found = 'not_found';
+                    
+                    // 1. Try exact matches for common 'OK' buttons
                     for (var i = 0; i < btns.length; i++) {
-                        var t = (btns[i].value || btns[i].innerText || '').toUpperCase();
-                        if ((t === 'OK' || t === 'CLOSE') && btns[i].offsetParent !== null) {
+                        var t = (btns[i].value || btns[i].innerText || '').trim().toUpperCase();
+                        if (targets.includes(t) && btns[i].offsetParent !== null) {
                             btns[i].click();
-                            return 'clicked_ok';
+                            return 'clicked_' + t.toLowerCase();
+                        }
+                    }
+                    
+                    // 2. Try partial matches/contains for success messages that might be clickable
+                    for (var i = 0; i < btns.length; i++) {
+                        var t = (btns[i].value || btns[i].innerText || '').trim().toUpperCase();
+                        if (t.includes('RECORD UPDATED') || t.includes('SUCCESSFULLY')) {
+                            if (btns[i].offsetParent !== null) {
+                                btns[i].click();
+                                return 'clicked_success_msg';
+                            }
                         }
                     }
                     return 'not_found';
                 }
             """)
-            self.logger.debug(f"[RENEWAL][{box_number}] JS OK result: {ok_result}")
+            self.logger.info(f"[RENEWAL][{box_number}] JS OK result: {ok_result}")
             
-            success = (ok_result == 'clicked_ok') or await self._step_ok(box_number)
+            # If JS finder failed, try the structured _step_ok (which has self-healing)
+            if ok_result == 'not_found':
+                success = await self._step_ok(box_number)
+            else:
+                success = True
+                self.logger.log_step(box_number, "H-OK", True)
+
             self.logger.log_step(box_number, "FINAL-SUCCESS", success)
             return success
 

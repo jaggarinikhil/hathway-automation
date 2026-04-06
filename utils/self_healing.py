@@ -66,21 +66,26 @@ class SelfHealingEngine:
         self.logger.warning(f"[HEALING] All stored selectors for '{key}' failed. Trying fallbacks...")
         
         # We use common semantic patterns based on the key name
+        base_key = key.replace("_button", "").replace("_link", "").replace("_", " ")
+        
         fallbacks = [
             # Try by text (most common)
-            lambda p: p.get_by_text(key.replace("_", " "), exact=False),
-            lambda p: p.get_by_role("button", name=key.replace("_", " "), exact=False),
-            lambda p: p.get_by_role("link", name=key.replace("_", " "), exact=False),
-            lambda p: p.get_by_label(key.replace("_", " "), exact=False),
+            lambda p: p.get_by_text(base_key, exact=False),
+            lambda p: p.get_by_role("button", name=base_key, exact=False),
+            lambda p: p.get_by_role("link", name=base_key, exact=False),
+            lambda p: p.get_by_label(base_key, exact=False),
         ]
 
         # For specific common keys, use targeted fallbacks
-        if "submit" in key:
+        if "submit" in key.lower():
             fallbacks.insert(0, lambda p: p.get_by_role("button", name="Submit"))
-        if "confirm" in key:
+        if "confirm" in key.lower():
             fallbacks.insert(0, lambda p: p.get_by_role("button", name="Confirm"))
-        if "search" in key:
+        if "search" in key.lower():
             fallbacks.insert(0, lambda p: p.get_by_placeholder(re.compile("search", re.I)))
+        if "ok" in key.lower() or "close" in key.lower():
+            fallbacks.insert(0, lambda p: p.get_by_role("button", name=re.compile("ok|close|done|finish", re.I)))
+            fallbacks.insert(1, lambda p: p.get_by_text(re.compile("ok|close|done|finish", re.I), exact=True))
 
         for fb in fallbacks:
             try:
