@@ -1,0 +1,61 @@
+name: Hathway Renewal
+
+on:
+  workflow_dispatch:
+    inputs:
+      box_number:
+        description: "Hathway STB box number (e.g. N71716815999)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  renew:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium + OS deps
+        run: python -m playwright install --with-deps chromium
+
+      - name: Install Tesseract OCR
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr
+
+      - name: Verify tools
+        run: |
+          python -c "import playwright; print('playwright ok')"
+          python -c "import pytesseract; print('pytesseract ok')"
+          tesseract --version | head -1
+
+      - name: Run renewal
+        env:
+          HATHWAY_USERNAME: ${{ secrets.HATHWAY_USERNAME }}
+          HATHWAY_PASSWORD: ${{ secrets.HATHWAY_PASSWORD }}
+          HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
+        run: python run_gha.py
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renewal-logs-${{ github.run_id }}
+          path: |
+            hathway_automation.log
+            captcha_debug/
+          retention-days: 3
