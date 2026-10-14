@@ -50,12 +50,3 @@ jobs:
           HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
         run: python run_gha.py
 
-      - name: Upload logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: renewal-logs-${{ github.run_id }}
-          path: |
-            hathway_automation.log
-            captcha_debug/
-          retention-days: 3
