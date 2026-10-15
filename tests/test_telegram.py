@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from telegram_run import classify, execute
+from telegram_run import classify, execute, outcome_details
 from telegram_notify import main
 from config import Config
 
@@ -56,3 +56,24 @@ class TelegramTests(unittest.TestCase):
     def test_manual_run_does_not_notify(self):
         with patch.dict(os.environ,{},clear=True):
             self.assertEqual(main(lambda *args:self.fail('unexpected API call')),0)
+
+    def test_failure_stage_and_reason(self):
+        details=outcome_details('unknown', {'errors':['STEP E old timeout', 'STEP G exception: Confirm button not found or not visible', 'Automatic retry stopped']})
+        self.assertEqual(details,('confirmation','confirmation_control_missing'))
+        self.assertEqual(outcome_details('unknown',{'errors':['STEP A exception: Timeout; popup intercepts pointer events']}),('box_search','popup_blocked_action'))
+        self.assertEqual(outcome_details('reported_success',{}),('final_confirmation','automation_reported_success'))
+
+    def test_retrack_failure_keeps_renewal_outcome_separate(self):
+        cfg=Config(username='mock',password='mock',box_numbers=['001'])
+        async def success_with_retrack_failure(config):
+            return ['001'],[],{'post_renewal_retrack':{'001':{'status':'failed','stage':'button','reason':'control_missing_or_timeout'}}}
+        previous=os.getcwd()
+        with tempfile.TemporaryDirectory() as d,patch('telegram_run.build_config_from_env',return_value=cfg):
+            try:
+                os.chdir(d)
+                self.assertEqual(asyncio.run(execute(success_with_retrack_failure)),1)
+                result=json.loads(Path('telegram_result.json').read_text())
+                self.assertEqual(result['outcome'],'reported_success')
+                self.assertEqual(result['retrack_status'],'failed')
+                self.assertEqual(result['retrack_stage'],'button')
+            finally:os.chdir(previous)

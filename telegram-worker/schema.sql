@@ -16,3 +16,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS active_box ON requests(box) WHERE active=1;
 
 CREATE INDEX IF NOT EXISTS pending_state ON requests(state,outcome);
 CREATE INDEX IF NOT EXISTS pending_notify ON requests(notified) WHERE message IS NOT NULL;
+
+-- Additive migration: safe to execute again on the existing database.
+CREATE TABLE IF NOT EXISTS requester_names (
+ request_id TEXT PRIMARY KEY,
+ display_name TEXT NOT NULL
+);

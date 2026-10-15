@@ -10,6 +10,7 @@ from agents.logger_agent import LoggerAgent
 from agents.login_agent import LoginAgent
 from agents.navigation_agent import NavigationAgent
 from agents.renewal_agent import RenewalAgent
+from agents.retrack_agent import RetrackAgent
 from playwright.async_api import async_playwright
 
 
@@ -20,6 +21,7 @@ async def run_automation(config: Config):
 
     successful_boxes = []
     failed_boxes = []
+    retrack_results = {}
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -65,6 +67,7 @@ async def run_automation(config: Config):
                 success = await renewal_agent.renew_box(box_number)
                 if success:
                     successful_boxes.append(box_number)
+                    retrack_results[box_number] = await RetrackAgent(page, config, logger).run(box_number)
                     logger.success(f"✅ Box {box_number} renewed successfully")
                 else:
                     failed_boxes.append(box_number)
@@ -113,6 +116,7 @@ async def run_automation(config: Config):
             logger.info("🔒 Browser closed")
 
     summary = logger.get_summary()
+    summary["post_renewal_retrack"] = retrack_results
     _print_final_report(successful_boxes, failed_boxes, summary, logger)
     return successful_boxes, failed_boxes, summary
 

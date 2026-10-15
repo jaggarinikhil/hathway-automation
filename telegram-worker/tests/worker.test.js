@@ -9,7 +9,7 @@ function environment(){
  env.DB={prepare(query){return {bind(...params){return {async run(){return {meta:{changes:Number(sql.prepare(query).run(...params).changes)}};},async first(){return sql.prepare(query).get(...params)||null;},async all(){return {results:sql.prepare(query).all(...params)};}};},async all(){return {results:sql.prepare(query).all()};}};}};
  return env;
 }
-const update=(text='000123',id=1)=>({update_id:id,message:{text,from:{id:42},chat:{id:42,type:'private'}}});
+const update=(text='000123',id=1)=>({update_id:id,message:{text,from:{id:42,first_name:'Test',last_name:'Member'},chat:{id:42,type:'private'}}});
 const request=(data,path='/telegram/webhook',secret='secret')=>new Request('https://worker.example'+path,{method:'POST',headers:{'content-type':'application/json','X-Telegram-Bot-Api-Secret-Token':secret,Authorization:'Bearer callback'},body:JSON.stringify(data)});
 async function invoke(env,data,fetcher,path){
  const tasks=[];const original=globalThis.fetch;globalThis.fetch=fetcher;
@@ -71,7 +71,7 @@ test('cancelled workflow reconciliation reports unknown, never success',async()=
  await reconcile(env,async(url,opts)=>{
   if(url.includes('api.github.com'))return Response.json({workflow_runs:[{id:123,display_title:'Hathway Renewal tg-1',status:'completed',conclusion:'cancelled',updated_at:'2020-01-01T00:00:00Z'}]});
   calls.push(JSON.parse(opts.body));return Response.json({ok:true});
- });assert.match(calls[0].text,/cancelled/);assert.match(calls[0].text,/unknown/);
+ });assert.match(calls[0].text,/cancelled/);assert.match(calls[0].text,/could not be verified/);
 });
 test('failed Telegram ack never redispatches; completion notification can be retried',async()=>{
  const env=environment();let dispatches=0;
@@ -107,4 +107,70 @@ test('blocked update stays a tombstone even after original box lock is released'
  const env=environment(),calls=[];await invoke(env,update(),api(calls));await invoke(env,update('000123',2),api(calls));
  await env.DB.prepare('UPDATE requests SET active=0 WHERE id=?').bind('tg-1').run();
  await invoke(env,update('000123',2),api(calls));assert.equal(calls.filter(x=>x.url.includes('api.github.com')).length,1);
+});
+
+test('unauthorized member can request only their own IDs without renewal access',async()=>{
+ const env=environment(),calls=[];
+ const member=update('/whoami');member.message.from.id=99;member.message.chat.id=99;
+ await invoke(env,member,api(calls));
+ assert.equal(calls.length,1);assert.equal(calls[0].body.chat_id,'99');
+ assert.match(calls[0].body.text,/User ID: 99/);assert.match(calls[0].body.text,/Chat ID: 99/);
+ member.message.text='BOX123';await invoke(env,member,api(calls));assert.equal(calls.length,1);
+ const rows=await env.DB.prepare('SELECT * FROM requests').all();assert.equal(rows.results.length,0);
+});
+test('identity command does not answer group chats',async()=>{
+ const env=environment(),calls=[],member=update('/whoami');member.message.chat.type='group';
+ await invoke(env,member,api(calls));assert.equal(calls.length,0);
+});
+test('member request notifies requester and owner; completion supplies owner for GitHub',async()=>{
+ const env=environment(),calls=[];env.TELEGRAM_ADMIN_CHAT_IDS='99,42,99';
+ await invoke(env,update(),api(calls));
+ const queued=calls.filter(x=>x.url.includes('sendMessage'));
+ assert.deepEqual(queued.map(x=>x.body.chat_id).sort(),['42','99']);
+ assert.match(queued[1].body.text,/Requested by: Test Member/);
+ const result=await (await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success'},api([]),'/complete')).json();
+ assert.deepEqual(result.additional_chat_ids,['99']);
+});
+test('reconciled result also reaches owner and original member',async()=>{
+ const env=environment();env.TELEGRAM_ADMIN_CHAT_IDS='99';await invoke(env,update(),api([]));
+ await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'unknown'},api([]),'/complete');
+ await env.DB.prepare('UPDATE requests SET notify_after=0 WHERE id=?').bind('tg-1').run();
+ const recipients=[];
+ await reconcile(env,async(url,opts)=>{recipients.push(JSON.parse(opts.body).chat_id);return Response.json({ok:true});});
+ assert.deepEqual(recipients.sort(),['42','99']);
+});
+
+test('member name is retained for queued, completion and reconciled owner messages',async()=>{
+ const env=environment(),calls=[];env.TELEGRAM_ADMIN_CHAT_IDS='99';
+ const message=update();message.message.from.first_name='Ravi';message.message.from.last_name='Kumar';
+ await invoke(env,message,api(calls));
+ assert.match(calls[1].body.text,/Requested by: Ravi Kumar/);
+ assert.doesNotMatch(calls[1].body.text,/Requested by chat/);
+ const result=await (await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success'},api([]),'/complete')).json();
+ assert.match(result.message,/Requested by: Ravi Kumar/);
+ await env.DB.prepare('UPDATE requests SET notify_after=0 WHERE id=?').bind('tg-1').run();
+ const notices=[];
+ await reconcile(env,async(url,opts)=>{notices.push(JSON.parse(opts.body).text);return Response.json({ok:true});});
+ assert.equal(notices.length,2);assert.ok(notices.every(text=>text.includes('Requested by: Ravi Kumar')));
+});
+test('names cannot inject extra message lines; numeric ID still controls authorization',async()=>{
+ const env=environment(),message=update();
+ message.message.from.first_name='Ravi\nStatus: Success';message.message.from.last_name='\u202E';
+ assert.equal(validate(message,env).requester_name,'Ravi Status: Success');
+ message.message.from.id=999;assert.equal(validate(message,env),null);
+});
+
+test('completion includes clear stage and safe reason without declaring uncertain submission failed',async()=>{
+ const env=environment();await invoke(env,update(),api([]));
+ const result=await (await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'unknown',stage_code:'confirmation',reason_code:'confirmation_control_missing'},api([]),'/complete')).json();
+ assert.match(result.message,/Stage: Confirm/);assert.match(result.message,/Reason: The Confirm button was not found/);
+ assert.match(result.message,/Portal result: Unverified/);assert.doesNotMatch(result.message,/Renewal failed/);
+});
+test('retrack failure is shown separately from the successful renewal outcome',async()=>{
+ const env=environment();await invoke(env,update(),api([]));
+ const result=await (await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success',retrack_status:'failed',retrack_stage:'button',retrack_reason:'control_missing_or_timeout'},api([]),'/complete')).json();
+ assert.match(result.message,/Renewal automation completed successfully/);
+ assert.match(result.message,/Retrack: Failed/);
+ assert.match(result.message,/Retrack stage: Retrack button/);
+ assert.match(result.message,/Do not repeat renewal/);
 });

@@ -255,3 +255,10 @@ python main.py --config-file config.json --plan "NEW PLAN NAME"
 ## Disclaimer
 
 This tool is intended for authorised portal users only. Ensure you have permission to automate actions on the target portal. The authors assume no liability for misuse.
+
+## Post-renewal Retrack
+
+After renewal reports success, the browser stays on the same box for 60 seconds,
+then clicks Retrack → Confirm → OK. Telegram shows renewal and Retrack outcomes
+separately. The portal's 15-minute repeat-request restriction is reported without
+automatic retries. See [RETRACK_SETUP.md](RETRACK_SETUP.md) for rollout and tests.

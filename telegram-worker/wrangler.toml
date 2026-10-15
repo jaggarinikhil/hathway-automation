@@ -4,6 +4,7 @@ compatibility_date = "2026-10-14"
 workers_dev = true
 
 [vars]
+TELEGRAM_ADMIN_CHAT_IDS = "7272926644"
 GITHUB_OWNER = "jaggarinikhil"
 GITHUB_REPO = "hathway-automation"
 GITHUB_WORKFLOW_FILE = "renew.yml"
@@ -13,7 +14,7 @@ BOX_PATTERN = "^[A-Za-z0-9-]{1,64}$"
 [[d1_databases]]
 binding = "DB"
 database_name = "hathway-telegram"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "300bc013-21c1-49da-9ef7-eb8f5c6f3f9f"
 
 [triggers]
 crons = ["*/5 * * * *"]

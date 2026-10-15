@@ -67,6 +67,7 @@ async def execute(automation=None):
     started = time.monotonic()
     outcome, code, reason = 'unknown', 1, None
     summary = {}
+    retrack = None
     try:
         try:
             cfg = build_config_from_env()
@@ -80,6 +81,7 @@ async def execute(automation=None):
                 automation = run_automation
             successful, failed, summary = await automation(cfg)
             outcome = classify(successful, failed, summary, cfg.box_numbers)
+            retrack = summary.get("post_renewal_retrack", {}).get(cfg.box_numbers[0])
             if outcome == 'unknown':
                 errors = '\n'.join(summary.get('errors', [])).lower()
                 for marker, label in [('step h', 'final_confirmation_error'), ('step g', 'confirmation_error'),
@@ -98,6 +100,12 @@ async def execute(automation=None):
     result = {'schema_version': 1, 'outcome': outcome,
               'duration_seconds': round(time.monotonic()-started, 3), 'exit_code': code}
     result['stage_code'], result['reason_code'] = outcome_details(outcome, summary)
+    if retrack:
+        result['retrack_status'] = retrack['status']
+        result['retrack_stage'] = retrack['stage']
+        result['retrack_reason'] = retrack['reason']
+        if retrack['status'] not in ('completed', 'already_requested'):
+            code = result['exit_code'] = 1
     if reason:
         result['failure_reason_code'] = reason
     Path('telegram_result.json').write_text(json.dumps(result)+'\n')
