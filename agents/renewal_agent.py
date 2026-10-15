@@ -418,50 +418,28 @@ class RenewalAgent:
             return False
 
     async def _step_confirm(self, box_number: str) -> bool:
-        """
-        Click the Confirm button that appears after Submit.
-        Waits for it to become visible first.
-        """
+        """Wait for a visible activation Confirm control, then click exactly once."""
         self.logger.info(f"[RENEWAL][{box_number}] STEP G: Clicking Confirm...")
-
+        self._submission_attempted = True
         try:
-            self._submission_attempted = True
-            # Scope confirmation to the observed popup; input values may differ in case.
-            popup_confirm = self.page.locator(
-                "#MasterBody_pnladdplanconfirm input[value='Confirm' i], "
-                "#MasterBody_pnladdplanconfirm button:has-text('Confirm')"
+            # Filter BEFORE .first: ASP.NET may keep an older hidden button in DOM.
+            # Support input, button and anchor controls, including uppercase labels.
+            confirm = self.page.locator(
+                "#MasterBody_pnladdplanconfirm input[value='Confirm' i]:visible, "
+                '#MasterBody_pnladdplanconfirm button:text-matches("^Confirm$", "i"):visible, '
+                '#MasterBody_pnladdplanconfirm a:text-matches("^Confirm$", "i"):visible, '
+                "#MasterBody_btnaddplanConfirm:visible"
             ).first
-            try:
-                await popup_confirm.wait_for(state="visible", timeout=3000)
-            except Exception:
-                success = await self._healer.smart_click(self.page, "confirm_button")
-            else:
-                # Don't try another click strategy after a potentially delivered click.
-                await popup_confirm.click(timeout=self.config.element_timeout)
-                success = True
-            
-            if not success:
-                # Fallback to older logic if smart_click fails completely
-                confirm_selectors = [
-                    "button:has-text('Confirm')",
-                    "input[value='Confirm']",
-                    "#MasterBody_btnaddplanConfirm",
-                ]
-                for sel in confirm_selectors:
-                    if await safe_click(self.page, sel, timeout=3000):
-                        success = True
-                        break
-
-            if not success:
-                raise RuntimeError("Confirm button not found or not visible")
-
+            await confirm.wait_for(state="visible", timeout=self.config.element_timeout)
+            # No second selector/forced click after a click may have reached server.
+            await confirm.click(timeout=self.config.element_timeout)
             await asyncio.sleep(0.5)
             self.logger.log_step(box_number, "G-CONFIRM", True)
             return True
-
-        except Exception as e:
-            self.logger.error(f"[RENEWAL][{box_number}] STEP G exception: {e}")
-            self.logger.log_step(box_number, "G-CONFIRM", False, str(e))
+        except Exception as error:
+            reason = "Confirm control missing or not usable before timeout"
+            self.logger.error(f"[RENEWAL][{box_number}] STEP G exception: {reason}")
+            self.logger.log_step(box_number, "G-CONFIRM", False, reason)
             return False
 
     async def _step_ok(self, box_number: str) -> bool:
