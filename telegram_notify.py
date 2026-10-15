@@ -10,7 +10,7 @@ from urllib.error import HTTPError
 
 def post(url, payload, headers=None):
     request = Request(url, json.dumps(payload).encode(),
-                      headers={'Content-Type': 'application/json', **(headers or {})}, method='POST')
+                      headers={'Content-Type': 'application/json', 'User-Agent': 'Hathway-Renewal-Notifier/1.0', **(headers or {})}, method='POST')
     with urlopen(request, timeout=20) as response:
         return json.load(response)
 
