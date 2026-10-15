@@ -46,10 +46,24 @@ def main(sender=post):
         accepted = sender(callback+'/complete', payload, headers)
         if accepted.get('notify'):
             stage = 'Telegram sendMessage'
-            sent = sender('https://api.telegram.org/bot'+os.environ['TELEGRAM_BOT_TOKEN']+'/sendMessage',
-                          {'chat_id': chat_id, 'text': accepted['message']})
-            if not sent.get('ok'):
-                raise RuntimeError('notification rejected')
+            # Admin recipients come from authenticated Worker configuration, never workflow input.
+            additional = accepted.get('additional_chat_ids', [])
+            if not isinstance(additional, list):
+                raise ValueError('invalid notification recipients')
+            recipients = list(dict.fromkeys([chat_id] + [str(value) for value in additional]))
+            if any(not re.fullmatch(r'\d+', recipient) for recipient in recipients):
+                raise ValueError('invalid notification recipient')
+            delivery_error = None
+            for recipient in recipients:
+                try:
+                    sent = sender('https://api.telegram.org/bot'+os.environ['TELEGRAM_BOT_TOKEN']+'/sendMessage',
+                                  {'chat_id': recipient, 'text': accepted['message']})
+                    if not sent.get('ok'):
+                        raise RuntimeError('notification rejected')
+                except Exception as error:
+                    delivery_error = error
+            if delivery_error is not None:
+                raise delivery_error
             stage = 'Worker notification receipt'
             sender(callback+'/notified', payload, headers)
         print('Telegram completion notification handled.')
