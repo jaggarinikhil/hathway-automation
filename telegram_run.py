@@ -23,9 +23,50 @@ def classify(successful, failed, summary, requested):
     return 'unknown'
 
 
+def outcome_details(outcome, summary):
+    """Allowlisted user-facing details, never raw portal exception text."""
+    defaults = {
+        'confirmed_success': ('verification', 'verified'),
+        'reported_success': ('final_confirmation', 'automation_reported_success'),
+        'confirmed_failure': ('verification', 'portal_confirmed_failure'),
+        'configuration_error': ('configuration', 'invalid_configuration'),
+        'login_failure': ('login', 'login_not_completed'),
+        'captcha_failure': ('captcha', 'captcha_attempts_exhausted'),
+        'navigation_failure': ('navigation', 'package_management_unavailable'),
+        'browser_failure': ('browser', 'browser_execution_error'),
+    }
+    if outcome in defaults:
+        return defaults[outcome]
+    errors = summary.get('errors', [])
+    stage = 'renewal'
+    stages = [('step h', 'final_confirmation'), ('step g', 'confirmation'),
+              ('confirm button not found', 'confirmation'), ('step f', 'submission'),
+              ('submit button not found', 'submission'), ('step e', 'plan_selection'),
+              ('plan checkbox not found', 'plan_selection'), ('step d', 'bouquet_selection'),
+              ('step c', 'add_plan'), ('step b', 'main_tv'), ('step a', 'box_search')]
+    for error in reversed(errors):
+        matched = next((value for marker, value in stages if marker in error.lower()), None)
+        if matched:
+            stage = matched
+            break
+    combined = '\n'.join(errors).lower()
+    if 'confirm button not found' in combined:
+        return stage, 'confirmation_control_missing'
+    if 'intercepts pointer events' in combined:
+        return stage, 'popup_blocked_action'
+    if 'timeout' in combined:
+        return stage, 'element_timeout'
+    if 'not found' in combined:
+        return stage, 'required_element_missing'
+    if 'retry suppressed' in combined or 'automatic retry stopped' in combined:
+        return stage, 'submission_outcome_uncertain'
+    return stage, 'no_verified_result'
+
+
 async def execute(automation=None):
     started = time.monotonic()
     outcome, code, reason = 'unknown', 1, None
+    summary = {}
     try:
         try:
             cfg = build_config_from_env()
@@ -56,6 +97,7 @@ async def execute(automation=None):
         outcome, code = 'browser_failure', 1
     result = {'schema_version': 1, 'outcome': outcome,
               'duration_seconds': round(time.monotonic()-started, 3), 'exit_code': code}
+    result['stage_code'], result['reason_code'] = outcome_details(outcome, summary)
     if reason:
         result['failure_reason_code'] = reason
     Path('telegram_result.json').write_text(json.dumps(result)+'\n')

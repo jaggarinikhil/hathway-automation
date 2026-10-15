@@ -33,7 +33,7 @@ def main(sender=post):
                'navigation_failure', 'login_failure', 'browser_failure', 'captcha_failure', 'configuration_error'}
     if result.get('outcome') not in allowed:
         result = {'outcome': 'unknown'}
-    payload = {k: v for k, v in result.items() if k in ('outcome', 'duration_seconds', 'failure_reason_code')}
+    payload = {k: v for k, v in result.items() if k in ('outcome', 'duration_seconds', 'failure_reason_code', 'stage_code', 'reason_code')}
     payload.update(request_id=request_id, chat_id=chat_id, run_id=run_id)
     callback = os.getenv('TELEGRAM_WORKER_URL', '').rstrip('/')
     if not callback.startswith('https://'):
