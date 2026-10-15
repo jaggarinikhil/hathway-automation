@@ -44,6 +44,7 @@ class RenewalAgent:
         Retries up to renewal_max_retries times on failure.
         Returns True if renewed successfully.
         """
+        self._submission_attempted = False
         for attempt in range(1, self.config.renewal_max_retries + 2):
             self.logger.info(
                 f"[RENEWAL][{box_number}] Attempt {attempt}/"
@@ -59,6 +60,12 @@ class RenewalAgent:
                     f"[RENEWAL][{box_number}] Exception on attempt {attempt}: {e}",
                     exc_info=True
                 )
+
+            confirmation_open = await self.page.locator("#MasterBody_pnladdplanconfirm").is_visible()
+            if self._submission_attempted or confirmation_open:
+                self.logger.error("[RENEWAL] Submission or confirmation was reached; outcome unknown. Automatic retry stopped. Check portal before repeating.")
+                self.logger.log_box_result(box_number, False, "Unknown outcome; retry suppressed")
+                return False
 
             if attempt <= self.config.renewal_max_retries:
                 self.logger.warning(f"[RENEWAL][{box_number}] Retrying — going back to search...")
@@ -332,6 +339,9 @@ class RenewalAgent:
                 self.logger.error(f"[RENEWAL][{box_number}] Failed to check the plan checkbox")
                 return False
 
+            # From this point a request may reach the portal; never restart on ambiguity.
+            self._submission_attempted = True
+
             # --- CLICK ADD BUTTON ---
             # As per user feedback: "after selecting u should click on add button"
             self.logger.info(f"[RENEWAL][{box_number}] Clicking 'Add' button...")
@@ -415,7 +425,20 @@ class RenewalAgent:
         self.logger.info(f"[RENEWAL][{box_number}] STEP G: Clicking Confirm...")
 
         try:
-            success = await self._healer.smart_click(self.page, "confirm_button")
+            self._submission_attempted = True
+            # Scope confirmation to the observed popup; input values may differ in case.
+            popup_confirm = self.page.locator(
+                "#MasterBody_pnladdplanconfirm input[value='Confirm' i], "
+                "#MasterBody_pnladdplanconfirm button:has-text('Confirm')"
+            ).first
+            try:
+                await popup_confirm.wait_for(state="visible", timeout=3000)
+            except Exception:
+                success = await self._healer.smart_click(self.page, "confirm_button")
+            else:
+                # Don't try another click strategy after a potentially delivered click.
+                await popup_confirm.click(timeout=self.config.element_timeout)
+                success = True
             
             if not success:
                 # Fallback to older logic if smart_click fails completely
@@ -551,6 +574,8 @@ class RenewalAgent:
             if renew_result == 'not_found':
                 self.logger.error(f"[RENEWAL][{box_number}] Could not find 'Renew' option to click!")
                 return False
+
+            self._submission_attempted = True
 
             # 3. Click Submit (Universal JS finder + Specific Selector)
             self.logger.info(f"[RENEWAL][{box_number}] Clicking Submit...")
