@@ -1,5 +1,21 @@
 # Hathway STB Renewal Automation
 
+## Telegram bot integration
+
+The existing manual `renew.yml` workflow and Python Playwright/Tesseract renewal
+remain available. Optional Telegram inputs add a Cloudflare Worker trigger,
+persistent duplicate protection and completion messages, without another browser
+execution service. The workflow uploads no sensitive artifacts.
+
+Follow [the complete Telegram setup guide](telegram-worker/README.md) for BotFather,
+secret configuration, authorization, Cloudflare D1, deployment and webhook setup.
+Use [TELEGRAM_TEST_RESULTS.md](TELEGRAM_TEST_RESULTS.md) for actual checks and
+unverified items. No Telegram or Cloudflare token should be pasted into chat.
+
+The current portal core reports success through its existing UI checks. Telegram
+labels that honestly as reported success; it does not invent independent
+transaction verification. Unknown results retain a box lock for manual review.
+
 A production-ready, agent-based browser automation system built with **Playwright** and **Tesseract OCR** for bulk renewal of Hathway set-top boxes on the partner portal.
 
 ---

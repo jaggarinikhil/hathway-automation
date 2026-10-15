@@ -1,0 +1,19 @@
+name = "hathway-telegram"
+main = "src/index.js"
+compatibility_date = "2026-10-14"
+workers_dev = true
+
+[vars]
+GITHUB_OWNER = "jaggarinikhil"
+GITHUB_REPO = "hathway-automation"
+GITHUB_WORKFLOW_FILE = "renew.yml"
+GITHUB_REF = "main"
+BOX_PATTERN = "^[A-Za-z0-9-]{1,64}$"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hathway-telegram"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[triggers]
+crons = ["*/5 * * * *"]

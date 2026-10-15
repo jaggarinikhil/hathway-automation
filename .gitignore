@@ -11,3 +11,14 @@ captcha_debug/
 .idea/
 *.zip
 Launch Hathway Renewal.app/
+.venv/
+result.json
+storage_state*.json
+playwright-report/
+test-results/
+
+telegram_result.json
+telegram-worker/.dev.vars*
+telegram-worker/.env*
+telegram-worker/node_modules/
+telegram-worker/.wrangler/

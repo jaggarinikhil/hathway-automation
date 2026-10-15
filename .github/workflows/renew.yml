@@ -1,4 +1,5 @@
 name: Hathway Renewal
+run-name: Hathway Renewal ${{ inputs.telegram_request_id }}
 
 on:
   workflow_dispatch:
@@ -6,6 +7,18 @@ on:
       box_number:
         description: "Hathway STB box number (e.g. N71716815999)"
         required: true
+        type: string
+
+      telegram_enabled:
+        description: "Enable Telegram completion (normally set by Worker)"
+        required: false
+        default: false
+        type: boolean
+      telegram_chat_id:
+        required: false
+        type: string
+      telegram_request_id:
+        required: false
         type: string
 
 permissions:
@@ -44,9 +57,29 @@ jobs:
           tesseract --version | head -1
 
       - name: Run renewal
+        if: ${{ !inputs.telegram_enabled }}
         env:
           HATHWAY_USERNAME: ${{ secrets.HATHWAY_USERNAME }}
           HATHWAY_PASSWORD: ${{ secrets.HATHWAY_PASSWORD }}
           HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
         run: python run_gha.py
 
+      - name: Run existing renewal for Telegram
+        id: telegram_renewal
+        if: inputs.telegram_enabled
+        env:
+          HATHWAY_USERNAME: ${{ secrets.HATHWAY_USERNAME }}
+          HATHWAY_PASSWORD: ${{ secrets.HATHWAY_PASSWORD }}
+          HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
+        run: python telegram_run.py
+
+      - name: Notify Telegram
+        if: ${{ always() && inputs.telegram_enabled }}
+        env:
+          TELEGRAM_ENABLED: 'true'
+          TELEGRAM_CHAT_ID: ${{ inputs.telegram_chat_id }}
+          TELEGRAM_REQUEST_ID: ${{ inputs.telegram_request_id }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WORKER_URL: ${{ vars.TELEGRAM_WORKER_URL }}
+          RESULT_CALLBACK_SECRET: ${{ secrets.RESULT_CALLBACK_SECRET }}
+        run: python telegram_notify.py
