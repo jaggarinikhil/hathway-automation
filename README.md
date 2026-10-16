@@ -287,3 +287,7 @@ Deploy both Python updates to GitHub and the Worker update to Cloudflare. No new
 The previous reader required an exact box cell in the same table as contact details and did not open Customer Details. The reader now validates the displayed box, opens that tab when fields are incomplete, and reads explicitly labeled values across the validated customer form. Account switching, renewal actions and Retrack execution remain unchanged. Box status is read before opening Customer Details, so tab changes cannot affect the ACTIVE/DEACTIVE decision. Logs record only which field names were captured, never customer values.
 
 Telegram no longer includes Retrack status/stage/reason or the Retrack retry reminder. This also applies to delivery retries of older stored notifications. Internal results and Actions logs still retain Retrack information.
+
+### Hathway Customer Name / Customer Mobile labels
+
+The Customer Details page uses a single `Customer Name` field and `Customer Mobile`. These exact labels are supported, including separate colon cells, spans, and the nested TV Details table that identifies the requested VC. Leading zeros are preserved. Telegram shows `Customer name` as the full portal-provided name and `Phone`; it does not guess a first/last-name split. Legacy separately labeled first/last fields remain supported and are joined for display. Retrack messages remain omitted; its execution is unchanged.

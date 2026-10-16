@@ -23,7 +23,7 @@ async def customer_details(page, box, *, context=None, validated=False):
     const text = el => ((el.matches('input,textarea,select') ? el.value : el.innerText) || '').replace(/\s+/g,' ').trim();
     const norm = value => value.toLowerCase().replace(/[^a-z0-9]/g,'');
     const strip = value => value.replace(/^\s*:\s*/, '').trim();
-    const fields = {firstname:'first_name',customerfirstname:'first_name',lastname:'last_name',customerlastname:'last_name',
+    const fields = {customername:'full_name',customermobile:'phone',firstname:'first_name',customerfirstname:'first_name',lastname:'last_name',customerlastname:'last_name',
         mobileno:'phone',mobilenumber:'phone',mobile:'phone',phoneno:'phone',phonenumber:'phone',phone:'phone',rmn:'phone',
         registeredmobile:'phone',contact:'phone',registeredmobileno:'phone',registeredmobilenumber:'phone',contactno:'phone',contactnumber:'phone'};
     const value = el => {
@@ -41,7 +41,7 @@ async def customer_details(page, box, *, context=None, validated=False):
     const boxMatched = scopes.length > 0;
     if (search && mainTV && visible(mainTV) && (boxMatched || validated)) scopes.push(document.body);
     if (!scopes.length) return {};
-    const candidates = {first_name:new Set(),last_name:new Set(),phone:new Set()};
+    const candidates = {full_name:new Set(),first_name:new Set(),last_name:new Set(),phone:new Set()};
     const add = (key, raw) => {
         if (!candidates[key]) return;
         const cleaned = strip(raw);
@@ -77,7 +77,7 @@ async def customer_details(page, box, *, context=None, validated=False):
         }
         for(const cell of root.querySelectorAll('td,dd')) {
             if(!visible(cell) || cell.querySelector('table'))continue;
-            const match=text(cell).match(/^(First Name|Customer First Name|Last Name|Customer Last Name|Mobile(?: No\.?| Number)?|Phone(?: No\.?| Number)?|Registered Mobile(?: No\.?| Number)?|Contact(?: No\.?| Number)?|RMN)\s*:\s*(.+)$/i);
+            const match=text(cell).match(/^(Customer Name|Customer Mobile|First Name|Customer First Name|Last Name|Customer Last Name|Mobile(?: No\.?| Number)?|Phone(?: No\.?| Number)?|Registered Mobile(?: No\.?| Number)?|Contact(?: No\.?| Number)?|RMN)\s*:\s*(.+)$/i);
             if(match)add(fields[norm(match[1])],match[2]);
         }
         for(const label of root.querySelectorAll('label[for]')) {
@@ -95,7 +95,7 @@ async def customer_details(page, box, *, context=None, validated=False):
         if context is not None:
             context['box_matched'] = data.get('__box_matched') is True
         result = {}
-        for key in ('first_name', 'last_name', 'phone'):
+        for key in ('full_name', 'first_name', 'last_name', 'phone'):
             value = data.get(key)
             if not isinstance(value, str):
                 continue
@@ -113,7 +113,7 @@ async def read_customer_tab(page, box, timeout=5000):
     """Read the optional Customer Details tab; existing flow next clicks Main TV."""
     context = {}
     details = await customer_details(page, box, context=context)
-    if len(details) == 3:
+    if details.get('phone') and (details.get('full_name') or (details.get('first_name') and details.get('last_name'))):
         return details
     try:
         tab = page.get_by_text('Customer Details', exact=True).first

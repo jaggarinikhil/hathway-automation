@@ -50,3 +50,10 @@ class CustomerTabTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(await agent._run_renewal_steps('001'))
         self.assertEqual(events,['status','customer','renew'])
         self.assertNotIn('Example',str(agent.logger.mock_calls))
+
+    async def test_full_customer_name_and_phone_need_no_tab_click(self):
+        page=self.page()
+        with patch('agents.portal_results.customer_details',new=AsyncMock(return_value={'full_name':'Example Customer','phone':'9000000000'})):
+            details=await read_customer_tab(page,'001')
+        self.assertEqual(details['full_name'],'Example Customer')
+        page.get_by_text.return_value.first.click.assert_not_awaited()

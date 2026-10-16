@@ -127,7 +127,8 @@ export default {
       const clean=value=>typeof value==='string'?value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,' ').replace(/\s+/g,' ').trim().slice(0,100):'';
       const contact=data.customer&&typeof data.customer==='object'?data.customer:{};
       const phone=clean(contact.phone);
-      const customer=['reported_success','confirmed_success'].includes(data.outcome)?`\nFirst name: ${clean(contact.first_name)||'Unavailable'}\nLast name: ${clean(contact.last_name)||'Unavailable'}\nPhone: ${/^[+\d ()-]{5,30}$/.test(phone)?phone:'Unavailable'}`:'';
+      const customerName=clean(contact.full_name)||[clean(contact.first_name),clean(contact.last_name)].filter(Boolean).join(' ');
+      const customer=['reported_success','confirmed_success'].includes(data.outcome)?`\nCustomer name: ${customerName||'Unavailable'}\nPhone: ${/^[+\d ()-]{5,30}$/.test(phone)?phone:'Unavailable'}`:'';
       // First terminal report wins. Unknown/reported-success keeps box locked for review.
       await env.DB.prepare("UPDATE requests SET state='completed', outcome=?, message=?, run_id=?, active=?, notified=0, notify_after=? WHERE id=? AND outcome IS NULL")
         .bind(data.outcome,descriptions[data.outcome]+detail+(detail?'':reason)+account+attempts+customer+duration,String(data.run_id),['confirmed_success','confirmed_failure','navigation_failure','login_failure','captcha_failure','configuration_error'].includes(data.outcome)?0:1,Date.now()+300000,row.id).run();
