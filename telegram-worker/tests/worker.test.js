@@ -166,13 +166,11 @@ test('completion includes clear stage and safe reason without declaring uncertai
  assert.match(result.message,/Stage: Confirm/);assert.match(result.message,/Reason: The Confirm button was not found/);
  assert.match(result.message,/Portal result: Unverified/);assert.doesNotMatch(result.message,/Renewal failed/);
 });
-test('retrack failure is shown separately from the successful renewal outcome',async()=>{
+test('retrack information is omitted while renewal result remains unchanged',async()=>{
  const env=environment();await invoke(env,update(),api([]));
  const result=await (await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success',retrack_status:'failed',retrack_stage:'button',retrack_reason:'control_missing_or_timeout'},api([]),'/complete')).json();
  assert.match(result.message,/Renewal automation completed successfully/);
- assert.match(result.message,/Retrack: Failed/);
- assert.match(result.message,/Retrack stage: Retrack button/);
- assert.match(result.message,/Do not repeat renewal/);
+ assert.doesNotMatch(result.message,/retrack|Do not repeat renewal/i);
 });
 test('portal rejection reason, stage, attempts and account reach notifications',async()=>{
  for(const [reason,text] of [['insufficient_balance','Insufficient balance.'],['vc_terminated_or_missing','VC which you are searching is either Terminated or does not exist.']]) {
@@ -190,4 +188,11 @@ test('successful notification contains customer fields and account; missing fiel
  const second=environment();await invoke(second,update(),api([]));
  const missing=await (await invoke(second,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success'},api([]),'/complete')).json();
  assert.match(missing.message,/First name: Unavailable/);assert.match(missing.message,/Phone: Unavailable/);
+});
+test('older stored completion messages also omit Retrack details',async()=>{
+ const env=environment();await invoke(env,update(),api([]));
+ await env.DB.prepare("UPDATE requests SET outcome='reported_success', message=?, run_id='123' WHERE id=?").bind('Renewal automation completed successfully.\nRetrack: Completed\nRetrack stage: Retrack response\nRetrack reason: Successful\nDo not repeat renewal to retry Retrack.','tg-1').run();
+ const result=await (await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success'},api([]),'/complete')).json();
+ assert.match(result.message,/Renewal automation completed successfully/);
+ assert.doesNotMatch(result.message,/retrack/i);
 });

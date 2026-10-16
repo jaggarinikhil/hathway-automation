@@ -259,9 +259,8 @@ This tool is intended for authorised portal users only. Ensure you have permissi
 ## Post-renewal Retrack
 
 After renewal reports success, the browser stays on the same box for 60 seconds,
-then clicks Retrack → Confirm → OK. Telegram shows renewal and Retrack outcomes
-separately. The portal's 15-minute repeat-request restriction is reported without
-automatic retries. See [RETRACK_SETUP.md](RETRACK_SETUP.md) for rollout and tests.
+then clicks Retrack → Confirm → OK. Telegram shows the renewal result only; Retrack details remain in Actions logs.
+The portal's 15-minute repeat-request restriction does not trigger automatic retries. See [RETRACK_SETUP.md](RETRACK_SETUP.md) for rollout and tests.
 
 
 ### Optional second Hathway account
@@ -276,8 +275,15 @@ Validation: mocked account tests, existing Python tests, Python compilation and 
 
 Only the visible other-LCO search message triggers an account switch. The terminated/nonexistent VC message and insufficient balance remain in the current account. Renewal is limited to two total attempts per account (including the first attempt). A second attempt after Submit is permitted only when the portal explicitly displays one of those rejection messages; ambiguous submissions still stop immediately. The rejected form is discarded with a fresh GET of the same page before another search. Failure to reset stops further attempts.
 
-Telegram results include the recognized rejection reason, stage, number of attempts, and Account 1 or Account 2. Success results additionally include first name, last name, and phone only when labeled fields can be tied to the exact requested box. Unsupported/missing fields are displayed as Unavailable; values are never guessed. Labels currently supported: First Name, Last Name, Mobile/Mobile No/Mobile Number, Phone/Phone No/Phone Number, and RMN in a visible box-specific table.
+Telegram results include the recognized rejection reason, stage, number of attempts, and Account 1 or Account 2. Success results additionally include first name, last name, and phone only when labeled fields can be tied to the exact requested box. Unsupported/missing fields are displayed as Unavailable; values are never guessed. Labels currently supported: First Name, Last Name, Mobile/Mobile No/Mobile Number, Phone/Phone No/Phone Number, Registered Mobile Number, Contact Number, and RMN. The reader opens the Customer Details tab when needed and supports separate identity/contact tables, colon cells, and readonly form fields. It validates the box context, then the existing Main TV renewal step continues. Ambiguous values are withheld.
 
 Customer contact fields go to the existing requester and configured admin notification recipients. They are not printed in Actions logs/job summaries or uploaded as artifacts. The private result file uses mode 0600; the rendered notification is stored in the existing D1 request record to recover failed deliveries. Consider this when authorizing members/admins and retaining request history.
 
 Deploy both Python updates to GitHub and the Worker update to Cloudflare. No new secrets or D1 schema changes are required. Real Hathway customer-field layout and error popup/native-dialog variants still require validation; unsupported layouts show Unavailable and unsupported messages remain unknown rather than fabricated success/failure.
+
+
+### Customer tab and notification fix
+
+The previous reader required an exact box cell in the same table as contact details and did not open Customer Details. The reader now validates the displayed box, opens that tab when fields are incomplete, and reads explicitly labeled values across the validated customer form. Account switching, renewal actions and Retrack execution remain unchanged. Box status is read before opening Customer Details, so tab changes cannot affect the ACTIVE/DEACTIVE decision. Logs record only which field names were captured, never customer values.
+
+Telegram no longer includes Retrack status/stage/reason or the Retrack retry reminder. This also applies to delivery retries of older stored notifications. Internal results and Actions logs still retain Retrack information.

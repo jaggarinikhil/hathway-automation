@@ -1,3 +1,7 @@
+// Also omit legacy Retrack lines when retrying an older stored notification.
+function renewalMessage(message) {
+  return String(message).split('\n').filter(line=>!/^Retrack(?: stage| reason)?:|^Do not repeat renewal to retry Retrack\.$/i.test(line)).join('\n');
+}
 // No portal access or browser runtime. D1 is the durable source of truth.
 const json = (data, status=200) => new Response(JSON.stringify(data), {status, headers:{'content-type':'application/json'}});
 const ids = value => new Set((value || '').split(',').map(x=>x.trim()).filter(Boolean));
@@ -87,7 +91,7 @@ export async function process(env, row, fetcher=fetch) {
 async function notify(env,id,fetcher=fetch) {
   const row=await env.DB.prepare('SELECT * FROM requests WHERE id=?').bind(id).first();
   if (!row || row.notified || !row.message) return;
-  await broadcast(env,row.chat_id,`${row.message}\nBox: ${row.box}\nRequested by: ${await requesterName(env,row)}\nRequest: ${row.id}${row.run_id?`\nRun: https://github.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/actions/runs/${row.run_id}`:''}`,fetcher);
+  await broadcast(env,row.chat_id,`${renewalMessage(row.message)}\nBox: ${row.box}\nRequested by: ${await requesterName(env,row)}\nRequest: ${row.id}${row.run_id?`\nRun: https://github.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/actions/runs/${row.run_id}`:''}`,fetcher);
   await env.DB.prepare('UPDATE requests SET notified=1 WHERE id=?').bind(id).run();
 }
 const outcomes=new Set(['confirmed_success','confirmed_failure','reported_success','unknown','navigation_failure','login_failure','browser_failure','captcha_failure','configuration_error']);
@@ -117,10 +121,6 @@ export default {
       const details={vc_terminated_or_missing:'VC which you are searching is either Terminated or does not exist.',insufficient_balance:'Insufficient balance.',verified:'Portal verification confirmed success.',automation_reported_success:'The existing renewal flow returned success.',portal_confirmed_failure:'Portal verification confirmed the renewal did not complete.',invalid_configuration:'Required configuration or input is missing or invalid.',login_not_completed:'Hathway login did not complete after its attempts.',captcha_attempts_exhausted:'CAPTCHA recognition/login attempts were exhausted.',package_management_unavailable:'Package Management could not be opened.',browser_execution_error:'Browser execution raised an error; transaction state could not be verified.',confirmation_control_missing:'The Confirm button was not found or was not visible.',popup_blocked_action:'An open popup blocked the required action.',element_timeout:'A required page element did not become usable before timeout.',required_element_missing:'A required portal element was not found.',submission_outcome_uncertain:'Submission may have occurred; automatic retries were stopped.',no_verified_result:'The automation returned no verified renewal result.'};
       const detail=stages[data.stage_code]&&details[data.reason_code]?`\nStage: ${stages[data.stage_code]}\nReason: ${details[data.reason_code]}`:'';
       const reason=reasons[data.failure_reason_code]?`\nFailure stage: ${reasons[data.failure_reason_code]}`:'';
-      const retrackStatuses={completed:'Completed (portal reported success)',already_requested:'Already requested; Hathway did not accept a new request',failed:'Failed',unknown:'Unverified'};
-      const retrackStages={wait:'One-minute wait',context:'Box context check',button:'Retrack button',confirm:'Retrack confirmation',result:'Retrack response',ok:'Retrack OK acknowledgment'};
-      const retrackReasons={portal_reported_success:'Hathway reported successful request submission.',cooldown_15_minutes:'Hathway requires a 15-minute gap between retrack requests for the same customer. No automatic retry.',portal_rejected:'Hathway rejected the retrack request.',unrecognized_response:'The retrack response did not confirm success.',box_context_mismatch:'The page no longer showed the requested box; no Retrack click was made.',control_missing_or_timeout:'The required control was missing, blocked or timed out. No automatic retry.'};
-      const retrack=retrackStatuses[data.retrack_status]?`\nRetrack: ${retrackStatuses[data.retrack_status]}\nRetrack stage: ${retrackStages[data.retrack_stage]||'Unavailable'}\nRetrack reason: ${retrackReasons[data.retrack_reason]||'Unavailable'}\nDo not repeat renewal to retry Retrack.`:'';
       const duration=Number.isFinite(data.duration_seconds)?`\nDuration: ${Math.floor(data.duration_seconds/60)}m ${Math.floor(data.duration_seconds%60)}s`:'';
       const account=[1,2].includes(data.account_number)?`\nAccount: ${data.account_number}`:'';
       const attempts=Number.isInteger(data.attempts)&&data.attempts>=1&&data.attempts<=2?`\nAttempts: ${data.attempts}/2`:'';
@@ -130,9 +130,9 @@ export default {
       const customer=['reported_success','confirmed_success'].includes(data.outcome)?`\nFirst name: ${clean(contact.first_name)||'Unavailable'}\nLast name: ${clean(contact.last_name)||'Unavailable'}\nPhone: ${/^[+\d ()-]{5,30}$/.test(phone)?phone:'Unavailable'}`:'';
       // First terminal report wins. Unknown/reported-success keeps box locked for review.
       await env.DB.prepare("UPDATE requests SET state='completed', outcome=?, message=?, run_id=?, active=?, notified=0, notify_after=? WHERE id=? AND outcome IS NULL")
-        .bind(data.outcome,descriptions[data.outcome]+detail+(detail?'':reason)+account+attempts+customer+retrack+duration,String(data.run_id),['confirmed_success','confirmed_failure','navigation_failure','login_failure','captcha_failure','configuration_error'].includes(data.outcome)?0:1,Date.now()+300000,row.id).run();
+        .bind(data.outcome,descriptions[data.outcome]+detail+(detail?'':reason)+account+attempts+customer+duration,String(data.run_id),['confirmed_success','confirmed_failure','navigation_failure','login_failure','captcha_failure','configuration_error'].includes(data.outcome)?0:1,Date.now()+300000,row.id).run();
       const stored=await env.DB.prepare('SELECT * FROM requests WHERE id=?').bind(row.id).first();
-      return json({accepted:true,notify:!stored.notified,additional_chat_ids:notificationChats(env,stored.chat_id).filter(chat=>chat!==stored.chat_id),message:`${stored.message}\nBox: ${stored.box}\nRequested by: ${await requesterName(env,stored)}\nRequest: ${stored.id}\nRun: https://github.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/actions/runs/${stored.run_id}`});
+      return json({accepted:true,notify:!stored.notified,additional_chat_ids:notificationChats(env,stored.chat_id).filter(chat=>chat!==stored.chat_id),message:`${renewalMessage(stored.message)}\nBox: ${stored.box}\nRequested by: ${await requesterName(env,stored)}\nRequest: ${stored.id}\nRun: https://github.com/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/actions/runs/${stored.run_id}`});
     }
     if(path!=='/telegram/webhook') return json({error:'not found'},404);
     // Identity lookup grants no renewal access and works only in the sender's private chat.

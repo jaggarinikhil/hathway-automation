@@ -15,7 +15,7 @@ Steps per box:
 import asyncio
 import re
 from playwright.async_api import Page
-from agents.portal_results import rejection, customer_details
+from agents.portal_results import rejection, read_customer_tab
 from agents.navigation_agent import NavigationAgent
 from agents.popup_handler_agent import PopupHandlerAgent
 from utils.helpers import (
@@ -124,12 +124,15 @@ class RenewalAgent:
         if not await self._step_search(box_number):
             return False
 
-        self.customer = await customer_details(self.page, box_number)
         await self._popup.dismiss_popups_if_present()
 
         # 2. Check Status (ACTIVE or DEACTIVE)
         status = await self._get_box_status(box_number)
         self.logger.info(f"[RENEWAL][{box_number}] Box status: {status}")
+
+        self.customer = await read_customer_tab(self.page, box_number, self.config.element_timeout)
+        fields = ", ".join(sorted(self.customer)) or "unavailable"
+        self.logger.info(f"[CUSTOMER] Captured fields: {fields}")
 
         if status == "ACTIVE":
             self.logger.info(f"[RENEWAL][{box_number}] Processing ACTIVE box renewal flow")
