@@ -271,3 +271,13 @@ Add repository Actions secrets `HATHWAY_USERNAME_2` and `HATHWAY_PASSWORD_2` for
 After search, only the visible message "You have no privileges to access customer information as s/he belongs to other LCO" triggers Signout, a fresh login through the existing CAPTCHA flow, and a search in account 2. Other failures and uncertain submissions never switch accounts. If both accounts deny access, processing stops. Each new box starts with account 1. Existing renewal and one-minute Retrack behavior are unchanged. If Signout does not reach Login.aspx, the switch stops safely.
 
 Validation: mocked account tests, existing Python tests, Python compilation and workflow YAML parsing. Real account switching, actual Signout markup/redirect, and real renewals have not been executed for this update.
+
+### Portal rejections and completion details
+
+Only the visible other-LCO search message triggers an account switch. The terminated/nonexistent VC message and insufficient balance remain in the current account. Renewal is limited to two total attempts per account (including the first attempt). A second attempt after Submit is permitted only when the portal explicitly displays one of those rejection messages; ambiguous submissions still stop immediately. The rejected form is discarded with a fresh GET of the same page before another search. Failure to reset stops further attempts.
+
+Telegram results include the recognized rejection reason, stage, number of attempts, and Account 1 or Account 2. Success results additionally include first name, last name, and phone only when labeled fields can be tied to the exact requested box. Unsupported/missing fields are displayed as Unavailable; values are never guessed. Labels currently supported: First Name, Last Name, Mobile/Mobile No/Mobile Number, Phone/Phone No/Phone Number, and RMN in a visible box-specific table.
+
+Customer contact fields go to the existing requester and configured admin notification recipients. They are not printed in Actions logs/job summaries or uploaded as artifacts. The private result file uses mode 0600; the rendered notification is stored in the existing D1 request record to recover failed deliveries. Consider this when authorizing members/admins and retaining request history.
+
+Deploy both Python updates to GitHub and the Worker update to Cloudflare. No new secrets or D1 schema changes are required. Real Hathway customer-field layout and error popup/native-dialog variants still require validation; unsupported layouts show Unavailable and unsupported messages remain unknown rather than fabricated success/failure.

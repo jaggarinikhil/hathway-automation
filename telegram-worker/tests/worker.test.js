@@ -174,3 +174,20 @@ test('retrack failure is shown separately from the successful renewal outcome',a
  assert.match(result.message,/Retrack stage: Retrack button/);
  assert.match(result.message,/Do not repeat renewal/);
 });
+test('portal rejection reason, stage, attempts and account reach notifications',async()=>{
+ for(const [reason,text] of [['insufficient_balance','Insufficient balance.'],['vc_terminated_or_missing','VC which you are searching is either Terminated or does not exist.']]) {
+  const env=environment();await invoke(env,update(),api([]));
+  const response=await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'confirmed_failure',stage_code:'submission',reason_code:reason,attempts:2,account_number:1,customer:{phone:'9000000000'}},api([]),'/complete');
+  const result=await response.json();
+  assert.ok(result.message.includes(text));assert.match(result.message,/Attempts: 2\/2/);assert.match(result.message,/Account: 1/);
+  assert.doesNotMatch(result.message,/9000000000/);
+ }
+});
+test('successful notification contains customer fields and account; missing fields are honest',async()=>{
+ const env=environment();await invoke(env,update(),api([]));
+ const response=await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success',account_number:2,customer:{first_name:'Test\nPerson',last_name:'Member',phone:'+91 9000000000'}},api([]),'/complete');
+ const result=await response.json();assert.match(result.message,/First name: Test Person/);assert.match(result.message,/Last name: Member/);assert.match(result.message,/Phone: \+91 9000000000/);assert.match(result.message,/Account: 2/);
+ const second=environment();await invoke(second,update(),api([]));
+ const missing=await (await invoke(second,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'reported_success'},api([]),'/complete')).json();
+ assert.match(missing.message,/First name: Unavailable/);assert.match(missing.message,/Phone: Unavailable/);
+});

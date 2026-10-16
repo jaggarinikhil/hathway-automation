@@ -68,6 +68,7 @@ async def execute(automation=None):
     outcome, code, reason = 'unknown', 1, None
     summary = {}
     retrack = None
+    details = {}
     try:
         try:
             cfg = build_config_from_env()
@@ -81,6 +82,9 @@ async def execute(automation=None):
                 automation = run_automation
             successful, failed, summary = await automation(cfg)
             outcome = classify(successful, failed, summary, cfg.box_numbers)
+            details = summary.get('box_details', {}).get(cfg.box_numbers[0], {})
+            if details.get('portal_failure') and cfg.box_numbers[0] in failed:
+                outcome = 'confirmed_failure'
             retrack = summary.get("post_renewal_retrack", {}).get(cfg.box_numbers[0])
             if outcome == 'unknown':
                 errors = '\n'.join(summary.get('errors', [])).lower()
@@ -100,6 +104,15 @@ async def execute(automation=None):
     result = {'schema_version': 1, 'outcome': outcome,
               'duration_seconds': round(time.monotonic()-started, 3), 'exit_code': code}
     result['stage_code'], result['reason_code'] = outcome_details(outcome, summary)
+    if details.get('account_number') in (1, 2):
+        result['account_number'] = details['account_number']
+    failure = details.get('portal_failure', {})
+    if outcome == 'confirmed_failure' and failure.get('reason_code') in ('vc_terminated_or_missing', 'insufficient_balance'):
+        result['reason_code'] = failure['reason_code']
+        result['stage_code'] = failure['stage_code']
+        result['attempts'] = failure.get('attempts', 1)
+    if outcome in ('reported_success', 'confirmed_success'):
+        result['customer'] = details.get('customer', {})
     if retrack:
         result['retrack_status'] = retrack['status']
         result['retrack_stage'] = retrack['stage']
@@ -108,7 +121,10 @@ async def execute(automation=None):
             code = result['exit_code'] = 1
     if reason:
         result['failure_reason_code'] = reason
-    Path('telegram_result.json').write_text(json.dumps(result)+'\n')
+    result_path = Path('telegram_result.json')
+    result_path.touch(mode=0o600, exist_ok=True)
+    result_path.chmod(0o600)
+    result_path.write_text(json.dumps(result)+'\n')
     if os.getenv('GITHUB_STEP_SUMMARY'):
         with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
             f.write(f'\n## Telegram renewal\n\nOutcome: {outcome}\n\nDuration: {result["duration_seconds"]} seconds\n')

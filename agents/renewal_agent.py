@@ -15,6 +15,7 @@ Steps per box:
 import asyncio
 import re
 from playwright.async_api import Page
+from agents.portal_results import rejection, customer_details
 from agents.navigation_agent import NavigationAgent
 from agents.popup_handler_agent import PopupHandlerAgent
 from utils.helpers import (
@@ -47,11 +48,17 @@ class RenewalAgent:
         """
         self._submission_attempted = False
         self.other_lco = False
-        for attempt in range(1, self.config.renewal_max_retries + 2):
+        self.portal_failure = None
+        self.customer = {}
+        max_attempts = min(2, self.config.renewal_max_retries + 1)
+        for attempt in range(1, max_attempts + 1):
+            self.portal_failure = None
+            self.attempts = attempt
             self.logger.info(
                 f"[RENEWAL][{box_number}] Attempt {attempt}/"
-                f"{self.config.renewal_max_retries + 1}"
+                f"{max_attempts}"
             )
+            success = False
             try:
                 success = await self._run_renewal_steps(box_number)
                 if success:
@@ -63,9 +70,27 @@ class RenewalAgent:
                     exc_info=True
                 )
 
+            if not success and not self.other_lco and not self.portal_failure:
+                await self._check_rejection("renewal")
+
             if self.other_lco:
                 # Search explicitly denied ownership before any submission.
                 return False
+
+            if self.portal_failure:
+                self.portal_failure['attempts'] = attempt
+                if attempt >= max_attempts:
+                    self.logger.log_box_result(box_number, False, self.portal_failure['reason_code'])
+                    return False
+                # Only an explicit portal rejection permits another attempt after Submit.
+                # GET the same page to discard the rejected form; never replay a POST.
+                try:
+                    await self.page.goto(self.page.url, wait_until="networkidle", timeout=self.config.page_load_timeout)
+                except Exception:
+                    self.logger.error('[RENEWAL] Could not reset rejected form; no further attempt')
+                    return False
+                self._submission_attempted = False
+                continue
 
             confirmation_open = await self.page.locator("#MasterBody_pnladdplanconfirm").is_visible()
             if self._submission_attempted or confirmation_open:
@@ -73,13 +98,21 @@ class RenewalAgent:
                 self.logger.log_box_result(box_number, False, "Unknown outcome; retry suppressed")
                 return False
 
-            if attempt <= self.config.renewal_max_retries:
+            if attempt < max_attempts:
                 self.logger.warning(f"[RENEWAL][{box_number}] Retrying — going back to search...")
                 await self._nav.go_back_to_search()
                 await random_delay(2.0, 3.5)
             else:
                 self.logger.log_box_result(box_number, False, "Exceeded retry limit")
 
+        return False
+
+    async def _check_rejection(self, stage):
+        code = await rejection(self.page)
+        if code:
+            self.portal_failure = {'stage_code': stage, 'reason_code': code}
+            self.logger.error(f'[RENEWAL] Portal rejected request: {code} ({stage})')
+            return True
         return False
 
     # ── Step orchestrator ─────────────────────────────────────────────────
@@ -91,6 +124,7 @@ class RenewalAgent:
         if not await self._step_search(box_number):
             return False
 
+        self.customer = await customer_details(self.page, box_number)
         await self._popup.dismiss_popups_if_present()
 
         # 2. Check Status (ACTIVE or DEACTIVE)
@@ -161,6 +195,9 @@ class RenewalAgent:
             if await denied.is_visible():
                 self.other_lco = True
                 self.logger.log_step(box_number, "A-SEARCH", False, "Customer belongs to other LCO")
+                return False
+
+            if await self._check_rejection("box_search"):
                 return False
 
             self.logger.log_step(box_number, "A-SEARCH", True)
@@ -445,6 +482,8 @@ class RenewalAgent:
                 '#MasterBody_pnladdplanconfirm a:text-matches("^Confirm$", "i"):visible, '
                 "#MasterBody_btnaddplanConfirm:visible"
             ).first
+            if await self._check_rejection("submission"):
+                return False
             await confirm.wait_for(state="visible", timeout=self.config.element_timeout)
             # No second selector/forced click after a click may have reached server.
             await confirm.click(timeout=self.config.element_timeout)
@@ -462,6 +501,8 @@ class RenewalAgent:
         Click the final OK button/dialog to complete the renewal.
         Handles both native browser dialogs and page-level OK buttons.
         """
+        if await self._check_rejection("confirmation"):
+            return False
         self.logger.info(f"[RENEWAL][{box_number}] STEP H: Clicking OK...")
 
         try:
@@ -611,6 +652,9 @@ class RenewalAgent:
             
             await asyncio.sleep(2.0)
 
+            if await self._check_rejection("submission"):
+                return False
+
             # 4. Click Confirm (Universal JS finder)
             self.logger.info(f"[RENEWAL][{box_number}] Clicking Confirm...")
             confirm_result = await self.page.evaluate("""
@@ -632,6 +676,9 @@ class RenewalAgent:
                 # Proceed anyway as Confirm might be skipped in some flows? No, usually required.
                 # return False
             await asyncio.sleep(1.0)
+
+            if await self._check_rejection("confirmation"):
+                return False
 
             # 5. Click OK (Universal JS finder)
             self.logger.info(f"[RENEWAL][{box_number}] Clicking OK...")

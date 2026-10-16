@@ -22,6 +22,7 @@ async def run_automation(config: Config):
     successful_boxes = []
     failed_boxes = []
     retrack_results = {}
+    box_details = {}
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -65,6 +66,7 @@ async def run_automation(config: Config):
             for idx, box_number in enumerate(config.box_numbers, 1):
                 logger.info(f"📺 Processing box {idx}/{len(config.box_numbers)}: {box_number}")
                 success = await renewal_agent.renew_box(box_number)
+                box_details[box_number] = renewal_agent.details
                 if success:
                     successful_boxes.append(box_number)
                     retrack_results[box_number] = await RetrackAgent(page, config, logger).run(box_number)
@@ -117,6 +119,7 @@ async def run_automation(config: Config):
 
     summary = logger.get_summary()
     summary["post_renewal_retrack"] = retrack_results
+    summary["box_details"] = box_details
     _print_final_report(successful_boxes, failed_boxes, summary, logger)
     return successful_boxes, failed_boxes, summary
 

@@ -10,6 +10,7 @@ class AccountRouter:
     def __init__(self, page, config, logger):
         self.page, self.config, self.logger = page, config, logger
         self.active_account, self.session_ready = 1, True
+        self.details = {}
         self.secondary_username = os.getenv('HATHWAY_USERNAME_2', '').strip()
         self.secondary_password = os.getenv('HATHWAY_PASSWORD_2', '')
 
@@ -37,12 +38,14 @@ class AccountRouter:
             return False
 
     async def renew_box(self, box_number):
+        self.details = {}
         if not self.session_ready:
             return self._fail(box_number, 'Account session unavailable')
         if self.active_account != 1 and not await self._switch(1):
             return self._fail(box_number, 'Could not restore first account')
         agent = RenewalAgent(self.page, self.config, self.logger)
         success = await agent.renew_box(box_number)
+        self._capture(agent, success)
         if success or not agent.other_lco:
             return success
         if not self.secondary_username or not self.secondary_password:
@@ -52,9 +55,17 @@ class AccountRouter:
             return self._fail(box_number, 'Second account login/navigation failed')
         agent = RenewalAgent(self.page, self.config, self.logger)
         success = await agent.renew_box(box_number)
+        self._capture(agent, success)
         if agent.other_lco:
             return self._fail(box_number, 'Customer belongs to neither configured account')
         return success
+
+    def _capture(self, agent, success):
+        self.details = {'account_number': self.active_account}
+        if isinstance(agent.portal_failure, dict):
+            self.details['portal_failure'] = dict(agent.portal_failure)
+        if success and isinstance(agent.customer, dict):
+            self.details['customer'] = dict(agent.customer)
 
     def _fail(self, box, reason):
         self.logger.error(f'[ACCOUNT] {reason}')
