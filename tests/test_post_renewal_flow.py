@@ -15,7 +15,7 @@ class PostRenewalFlowTests(unittest.IsolatedAsyncioTestCase):
         nav=Mock();nav.handle_post_login_slides=AsyncMock();nav.go_to_package_management=AsyncMock(return_value=True)
         renewal=Mock();renewal.renew_box=AsyncMock(return_value=renewal_success)
         retrack=Mock();retrack.run=AsyncMock(return_value={'status':'failed','stage':'button','reason':'control_missing_or_timeout'})
-        with patch('main.async_playwright',return_value=manager),patch('main.LoggerAgent',return_value=logger),patch('main.LoginAgent',return_value=login),patch('main.NavigationAgent',return_value=nav),patch('main.RenewalAgent',return_value=renewal),patch('main.RetrackAgent',return_value=retrack) as factory,patch('main.asyncio.sleep',new=AsyncMock()):
+        with patch('main.async_playwright',return_value=manager),patch('main.LoggerAgent',return_value=logger),patch('main.LoginAgent',return_value=login),patch('main.NavigationAgent',return_value=nav),patch('main.AccountRouter',return_value=renewal),patch('main.RetrackAgent',return_value=retrack) as factory,patch('main.asyncio.sleep',new=AsyncMock()):
             result=await main.run_automation(Config(username='mock',password='mock',box_numbers=['BOX1']))
         return result,renewal,retrack,factory
 

@@ -61,6 +61,8 @@ jobs:
         env:
           HATHWAY_USERNAME: ${{ secrets.HATHWAY_USERNAME }}
           HATHWAY_PASSWORD: ${{ secrets.HATHWAY_PASSWORD }}
+          HATHWAY_USERNAME_2: ${{ secrets.HATHWAY_USERNAME_2 }}
+          HATHWAY_PASSWORD_2: ${{ secrets.HATHWAY_PASSWORD_2 }}
           HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
         run: python run_gha.py
 
@@ -70,6 +72,8 @@ jobs:
         env:
           HATHWAY_USERNAME: ${{ secrets.HATHWAY_USERNAME }}
           HATHWAY_PASSWORD: ${{ secrets.HATHWAY_PASSWORD }}
+          HATHWAY_USERNAME_2: ${{ secrets.HATHWAY_USERNAME_2 }}
+          HATHWAY_PASSWORD_2: ${{ secrets.HATHWAY_PASSWORD_2 }}
           HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
         run: python telegram_run.py
 

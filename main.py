@@ -9,7 +9,7 @@ from config import Config
 from agents.logger_agent import LoggerAgent
 from agents.login_agent import LoginAgent
 from agents.navigation_agent import NavigationAgent
-from agents.renewal_agent import RenewalAgent
+from agents.account_router import AccountRouter
 from agents.retrack_agent import RetrackAgent
 from playwright.async_api import async_playwright
 
@@ -61,7 +61,7 @@ async def run_automation(config: Config):
                 return [], config.box_numbers, logger.get_summary()
 
             # STEP 4: Renewal Loop
-            renewal_agent = RenewalAgent(page, config, logger)
+            renewal_agent = AccountRouter(page, config, logger)
             for idx, box_number in enumerate(config.box_numbers, 1):
                 logger.info(f"📺 Processing box {idx}/{len(config.box_numbers)}: {box_number}")
                 success = await renewal_agent.renew_box(box_number)

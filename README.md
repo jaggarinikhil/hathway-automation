@@ -262,3 +262,12 @@ After renewal reports success, the browser stays on the same box for 60 seconds,
 then clicks Retrack → Confirm → OK. Telegram shows renewal and Retrack outcomes
 separately. The portal's 15-minute repeat-request restriction is reported without
 automatic retries. See [RETRACK_SETUP.md](RETRACK_SETUP.md) for rollout and tests.
+
+
+### Optional second Hathway account
+
+Add repository Actions secrets `HATHWAY_USERNAME_2` and `HATHWAY_PASSWORD_2` for your second authorized Hathway account. Keep the existing primary secrets unchanged. Both manual and Telegram renewals use these optional secrets. No Worker changes are needed.
+
+After search, only the visible message "You have no privileges to access customer information as s/he belongs to other LCO" triggers Signout, a fresh login through the existing CAPTCHA flow, and a search in account 2. Other failures and uncertain submissions never switch accounts. If both accounts deny access, processing stops. Each new box starts with account 1. Existing renewal and one-minute Retrack behavior are unchanged. If Signout does not reach Login.aspx, the switch stops safely.
+
+Validation: mocked account tests, existing Python tests, Python compilation and workflow YAML parsing. Real account switching, actual Signout markup/redirect, and real renewals have not been executed for this update.

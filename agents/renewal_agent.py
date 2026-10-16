@@ -13,6 +13,7 @@ Steps per box:
 """
 
 import asyncio
+import re
 from playwright.async_api import Page
 from agents.navigation_agent import NavigationAgent
 from agents.popup_handler_agent import PopupHandlerAgent
@@ -45,6 +46,7 @@ class RenewalAgent:
         Returns True if renewed successfully.
         """
         self._submission_attempted = False
+        self.other_lco = False
         for attempt in range(1, self.config.renewal_max_retries + 2):
             self.logger.info(
                 f"[RENEWAL][{box_number}] Attempt {attempt}/"
@@ -60,6 +62,10 @@ class RenewalAgent:
                     f"[RENEWAL][{box_number}] Exception on attempt {attempt}: {e}",
                     exc_info=True
                 )
+
+            if self.other_lco:
+                # Search explicitly denied ownership before any submission.
+                return False
 
             confirmation_open = await self.page.locator("#MasterBody_pnladdplanconfirm").is_visible()
             if self._submission_attempted or confirmation_open:
@@ -147,6 +153,15 @@ class RenewalAgent:
 
             await self.page.wait_for_load_state("networkidle", timeout=self.config.page_load_timeout)
             await random_delay(1.0, 2.0)
+
+            denied = self.page.get_by_text(re.compile(
+                r"you have no privileges to access customer information as s/he belongs to other LCO",
+                re.IGNORECASE,
+            )).first
+            if await denied.is_visible():
+                self.other_lco = True
+                self.logger.log_step(box_number, "A-SEARCH", False, "Customer belongs to other LCO")
+                return False
 
             self.logger.log_step(box_number, "A-SEARCH", True)
             return True
