@@ -161,6 +161,9 @@ class ReportAgent:
         if isinstance(values,list):
             safe=[value for value in values if isinstance(value,str) and re.fullmatch(r'\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}',value)]
             print('[REPORT] '+stage+' dates: '+(', '.join(safe) or 'no visible date controls'))
+        visible_dates=await self.page.evaluate(r"() => [...new Set((document.body.innerText||'').match(/\b\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}\b/g)||[])].slice(0,10)")
+        if isinstance(visible_dates,list):
+            print('[REPORT] '+stage+' displayed dates: '+', '.join(str(x) for x in visible_dates if re.fullmatch(r'\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}',str(x))))
 
     async def _transaction_details(self):
         # Observed in the recording: Search -> rptAddPlanTransUSER.aspx
@@ -176,10 +179,21 @@ class ReportAgent:
         await self._log_report_dates('transaction summary')
         if urlparse(self.page.url).path.lower().endswith('rptaddplantransdet.aspx'):
             return
-        # View Details covers the complete account summary, rather than taking
-        # just the first linked operator ID and silently dropping other users.
-        name=re.compile(r'^View\s+Details$',re.I)
-        control=self.page.get_by_role('button',name=name).or_(self.page.get_by_role('link',name=name)).first
+        # The recording follows the linked User ID, which preserves search state.
+        # Use it only when the summary has exactly one operator; never silently
+        # omit other operators. Multi-operator summaries retain the all-details path.
+        operator_links=self.page.locator('a:visible')
+        usable=[]
+        for link in await operator_links.all():
+            text=(await link.inner_text()).strip()
+            if re.fullmatch(r'\d{6,}',text):
+                usable.append(link)
+        if len(usable)==1:
+            control=usable[0]
+            print('[REPORT] Following the sole operator User ID detail link.')
+        else:
+            name=re.compile(r'^View\s+Details$',re.I)
+            control=self.page.get_by_role('button',name=name).or_(self.page.get_by_role('link',name=name)).first
         await control.wait_for(state='visible',timeout=self.config.element_timeout)
         popups=[]
         original=self.page
