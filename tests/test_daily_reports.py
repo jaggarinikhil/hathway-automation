@@ -277,3 +277,23 @@ class TransactionSummaryTests(unittest.IsolatedAsyncioTestCase):
         agent=ReportAgent(page,Config())
         await agent._transaction_details()
         page.get_by_role.assert_not_called()
+
+
+class ExcludedTransactionTests(unittest.TestCase):
+    def test_excluded_box_and_type_are_rendered_separately(self):
+        excluded=[]
+        rows,count=parse_grid('renewals',TX,[tx_row(),tx_row('Add'),tx_row('Deactivate')],DAY,excluded)
+        self.assertEqual(excluded,[{'box':'0000123','type':'Add'},{'box':'0000123','type':'Deactivate'}])
+        text='\n'.join(render('renewals',DAY,rows,datetime(2026,10,17,19,tzinfo=IST),count,excluded))
+        self.assertIn('Boxes: 1 | Plan entries: 1',text)
+        self.assertIn('Transaction type: Add',text)
+        self.assertIn('Transaction type: Deactivate',text)
+        self.assertNotIn('PRIVATE ADDRESS',text)
+
+    def test_only_excluded_entries_and_chunking(self):
+        excluded=[]
+        rows,count=parse_grid('renewals',TX,[tx_row('Add')]*100,DAY,excluded)
+        messages=render('renewals',DAY,rows,datetime(2026,10,17,19,tzinfo=IST),count,excluded)
+        self.assertTrue(all(utf16_length(message)<3500 for message in messages))
+        self.assertEqual(sum(message.count('Transaction type: Add') for message in messages),100)
+        self.assertIn('Boxes: 0 | Plan entries: 0',messages[0])

@@ -37,7 +37,7 @@ def normalize(value):
     return re.sub('[^a-z0-9]', '', value.lower())
 
 
-def parse_grid(kind, headers, rows, report_date):
+def parse_grid(kind, headers, rows, report_date, excluded=None):
     columns = [normalize(str(h)) for h in headers]
     def index(key, required=False):
         for alias in LABELS[key]:
@@ -61,14 +61,16 @@ def parse_grid(kind, headers, rows, report_date):
         # Date mismatches mean the portal did not honor the requested filters.
         if date_value(item['expiry' if kind == 'expiry' else 'time']) != report_date:
             raise ReportError('report_date_mismatch')
-        if kind == 'renewals' and item['type'].casefold() != 'renewal':
-            ignored += 1
-            continue
         # Preserve identifiers as strings, including leading zeros.
         item['vc'] = item.get('vc', '')
         item['box'] = item['vc'] or item.get('stb', '')
         if not re.fullmatch(r'[A-Za-z0-9-]{1,64}', item['box']):
             raise ReportError('report_identifier_missing')
+        if kind == 'renewals' and item['type'].casefold() != 'renewal':
+            ignored += 1
+            if excluded is not None:
+                excluded.append({'box': item['box'], 'type': item['type'] or 'Unspecified'})
+            continue
         result.append(item)
     return result, ignored
 
@@ -77,7 +79,7 @@ def utf16_length(value):
     return len(value.encode('utf-16-le')) // 2
 
 
-def render(kind, report_date, records, collected_at, ignored=0):
+def render(kind, report_date, records, collected_at, ignored=0, excluded=None):
     title = 'Plans ending today' if kind == 'expiry' else 'Renewals recorded today'
     unique = len({record['box'] for record in records})
     header = (f'{title}\nDate: {report_date.isoformat()} (IST)\nAccount: 1\n'
@@ -90,9 +92,9 @@ def render(kind, report_date, records, collected_at, ignored=0):
             header += f'Other transaction entries excluded: {ignored}\n'
     else:
         header += 'Source: Hathway Plan Expiry Report; all packages.\n'
-    if not records:
-        return [header + '\nNo matching entries reported by Hathway.']
     blocks = []
+    if not records:
+        blocks.append('No matching entries reported by Hathway.')
     for record in records:
         lines = [f'Box: {record["box"]}', f'VC: {record["vc"] or "Unavailable"}', f'STB: {record.get("stb") or "Unavailable"}',
                  f'Customer: {record["customer"] or "Unavailable"}']
@@ -107,6 +109,13 @@ def render(kind, report_date, records, collected_at, ignored=0):
         if utf16_length(block) > 2700:
             raise ReportError('report_field_too_long')
         blocks.append(block)
+    if kind == 'renewals' and excluded:
+        blocks.append('Other transactions (excluded from renewal totals):')
+        for entry in excluded:
+            block = f'Box: {entry["box"]}\nTransaction type: {entry["type"]}'
+            if utf16_length(block) > 2700:
+                raise ReportError('report_field_too_long')
+            blocks.append(block)
     chunks, current = [], header
     for block in blocks:
         if utf16_length(current + '\n' + block) > 3400:

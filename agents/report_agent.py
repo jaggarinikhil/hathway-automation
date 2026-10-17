@@ -261,6 +261,7 @@ class ReportAgent:
 
     async def collect(self, kind, day):
         records, ignored, seen = [], 0, set()
+        self.excluded_transactions = []
         for _ in range(500):
             snapshot=await self._wait_for_grid(kind)
             if snapshot.get('error'):
@@ -274,7 +275,7 @@ class ReportAgent:
             if fingerprint in seen:
                 raise ReportError('pagination_repeated')
             seen.add(fingerprint)
-            rows, skipped=parse_grid(kind,snapshot['headers'],snapshot['rows'],day)
+            rows, skipped=parse_grid(kind,snapshot['headers'],snapshot['rows'],day,self.excluded_transactions)
             records.extend(rows);ignored+=skipped
             if not snapshot.get('next'):
                 return records, ignored

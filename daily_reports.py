@@ -97,7 +97,7 @@ async def collect():
                 stage='extraction'
                 records,ignored=await report.collect(kind,day)
                 stage='formatting'
-                messages=render(kind,day,records,datetime.now(IST),ignored)
+                messages=render(kind,day,records,datetime.now(IST),ignored,getattr(report,'excluded_transactions',[]))
                 write_result({'status':'ready','type':kind,'date':day.isoformat(),
                               'rows':len(records),'messages':messages})
                 print(f'Daily report collected: {len(records)} matching plan entries. Customer data is not printed.')
