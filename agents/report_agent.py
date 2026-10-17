@@ -148,6 +148,13 @@ class ReportAgent:
             if await field.get_attribute('id') not in {x['id'] for x in dates} and (await field.input_value()).strip():
                 raise ReportError('unexpected_customer_filter')
         await self._log_report_dates('search form')
+        metadata=await self.page.evaluate(r"""() => {
+          const clean=value=>(value||'').replace(/(['"])(?:\\.|(?!\1).)*?\1/g,'<literal>').slice(0,400);
+          return [...document.querySelectorAll('input')].filter(el=>el.getClientRects().length&&(/^\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}$/.test(el.value.trim())||el.value==='Search')).map(el=>({id:el.id,name:el.name,type:el.type,disabled:el.disabled,onchange:clean(el.getAttribute('onchange')),onclick:clean(el.getAttribute('onclick')),onblur:clean(el.getAttribute('onblur'))}));
+        }""")
+        import json
+        print('[REPORT] Date/Search control metadata: '+json.dumps(metadata))
+
         button='Submit' if kind=='expiry' else 'Search'
         await self.page.get_by_role('button',name=button,exact=True).click(timeout=self.config.element_timeout)
         await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
