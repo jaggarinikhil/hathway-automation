@@ -1,6 +1,6 @@
 """Pure, read-only report validation and Telegram text rendering."""
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo('Asia/Kolkata')
@@ -37,7 +37,13 @@ def normalize(value):
     return re.sub('[^a-z0-9]', '', value.lower())
 
 
-def parse_grid(kind, headers, rows, report_date, excluded=None):
+def weekly_period(day):
+    """Monday–Saturday preceding the most recent Sunday (including today)."""
+    sunday = day - timedelta(days=(day.weekday() + 1) % 7)
+    return sunday - timedelta(days=6), sunday - timedelta(days=1)
+
+
+def parse_grid(kind, headers, rows, report_date, excluded=None, end_date=None):
     columns = [normalize(str(h)) for h in headers]
     def index(key, required=False):
         for alias in LABELS[key]:
@@ -59,7 +65,7 @@ def parse_grid(kind, headers, rows, report_date, excluded=None):
         # Prefer New STB No, but use older STB No if the preferred cell is blank.
         item['stb'] = next((str(row[columns.index(alias)]).strip() for alias in LABELS['stb'] if alias in columns and str(row[columns.index(alias)]).strip()), '')
         # Date mismatches mean the portal did not honor the requested filters.
-        if date_value(item['expiry' if kind == 'expiry' else 'time']) != report_date:
+        if not report_date <= date_value(item['expiry' if kind == 'expiry' else 'time']) <= (end_date or report_date):
             raise ReportError('report_date_mismatch')
         # Preserve identifiers as strings, including leading zeros.
         item['vc'] = item.get('vc', '')
@@ -74,10 +80,13 @@ def utf16_length(value):
     return len(value.encode('utf-16-le')) // 2
 
 
-def render(kind, report_date, records, collected_at, ignored=0, excluded=None):
+def render(kind, report_date, records, collected_at, ignored=0, excluded=None, end_date=None):
     title = 'Plans ending today' if kind == 'expiry' else "Today's transactions"
+    if end_date is not None:
+        title = 'Weekly transactions (Monday–Saturday)'
+    period = (f'Period: {report_date.isoformat()} to {end_date.isoformat()} (IST)' if end_date else f'Date: {report_date.isoformat()} (IST)')
     unique = len({record['box'] for record in records})
-    header = (f'{title}\nDate: {report_date.isoformat()} (IST)\nAccount: 1\n'
+    header = (f'{title}\n{period}\nAccount: 1\n'
               f'As of: {collected_at.astimezone(IST).strftime("%H:%M IST")}\n'
               f'Boxes: {unique} | {"Plan entries" if kind == "expiry" else "Transactions"}: {len(records)}\n')
     if kind == 'renewals':

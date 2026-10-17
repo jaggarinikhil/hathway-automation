@@ -298,3 +298,21 @@ class TransactionReportTests(unittest.TestCase):
         self.assertTrue(all(utf16_length(message)<3500 for message in messages))
         self.assertEqual(sum(message.count('Transaction type: Activation') for message in messages),100)
         self.assertIn('Transactions: 100',messages[0])
+
+
+class WeeklyReportTests(unittest.TestCase):
+    def test_week_boundaries(self):
+        from daily_report_data import weekly_period
+        self.assertEqual(weekly_period(date(2026,10,18)),(date(2026,10,12),date(2026,10,17)))
+        self.assertEqual(weekly_period(date(2026,10,19)),(date(2026,10,12),date(2026,10,17)))
+        self.assertEqual(weekly_period(date(2027,1,3)),(date(2026,12,28),date(2027,1,2)))
+
+    def test_range_and_combined_types(self):
+        first=tx_row('Activation');first[12]='12-Oct-2026 10:00:00 AM'
+        rows,_=parse_grid('renewals',TX,[first,tx_row()],date(2026,10,12),end_date=DAY)
+        text='\n'.join(render('renewals',date(2026,10,12),rows,datetime(2026,10,18,10,tzinfo=IST),end_date=DAY))
+        self.assertIn('Weekly transactions (Monday–Saturday)',text)
+        self.assertIn('Period: 2026-10-12 to 2026-10-17 (IST)',text)
+        self.assertIn('Activation: 1 | Renewal: 1',text)
+        with self.assertRaisesRegex(ReportError,'report_date_mismatch'):
+            parse_grid('renewals',TX,[first],date(2026,10,13),end_date=DAY)

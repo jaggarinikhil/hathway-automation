@@ -304,3 +304,9 @@ Set repository variable `TELEGRAM_REPORT_CHAT_ID` to the owner's private chat ID
 For setup, first manual read-only tests, privacy, pagination limits, actual local test results and live-test limitations, see [DAILY_REPORTS_SETUP.md](DAILY_REPORTS_SETUP.md).
 
 The daily-report reader waits for delayed ASP.NET results and supports visible same-origin report frames. Expiry tables can use a VC or STB identifier column, including reports without a VC column. If detection still fails, Actions logs show only safe table counts and recognized column categories. See [EXPIRY_GRID_FIX.md](EXPIRY_GRID_FIX.md) for compatibility checks and live-test limitations.
+
+### Weekly account 1 transactions
+
+Every Sunday at 10 AM IST, the report workflow sends the preceding Monday through Saturday's transactions to the configured owner Telegram chat. Activation and Renewal appear together with box numbers, transaction types, and totals by type. The Sunday daily expiry report still runs separately. GitHub scheduled runs may be delayed.
+
+For a manual weekly report, select `weekly` in Daily Hathway Reports. The optional report date is the Sunday anchor (blank uses the current India date); it selects the Monday–Saturday period preceding the most recent Sunday on or before that date. No renewal is submitted. Existing secrets and report chat configuration are reused.

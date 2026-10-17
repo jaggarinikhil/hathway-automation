@@ -102,7 +102,7 @@ class ReportAgent:
         if '/reports/' not in path or path.rsplit('/',1)[-1] not in allowed:
             raise ReportError('unexpected_report_page')
 
-    async def filters(self, kind, day):
+    async def filters(self, kind, day, end_date=None):
         self._assert_path(kind)
         # The recordings show two prefilled date text boxes. Discover their actual IDs.
         dates=await self.page.evaluate(r'''() => [...document.querySelectorAll('input')].filter(el=>el.getClientRects().length&&/^\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}$/.test(el.value.trim())).map(el=>({id:el.id,value:el.value}))''')
@@ -122,10 +122,12 @@ class ReportAgent:
                 continue
             else:
                 raise ReportError('report_filters_changed')
-        for item in dates:
+        for position,item in enumerate(dates):
+            target_day = (end_date or day) if position else day
+            expected = target_day.strftime('%d-%b-%Y')
             control=self.page.locator('[id="'+item['id'].replace('"','\\"')+'"]')
             await control.evaluate('''(el,value)=>{el.removeAttribute('readonly');el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}''',expected)
-            if date_value(await control.input_value())!=day:
+            if date_value(await control.input_value())!=target_day:
                 raise ReportError('date_filter_not_set')
         # No individual VC filter: monitor all account-1 boxes.
         boxes=self.page.locator('input[type="text"]:visible')
@@ -259,7 +261,7 @@ class ReportAgent:
         print(f'[REPORT] Grid not recognized after waiting. Visible tables: {count}; recognized column types: '+(', '.join(columns) or 'none'))
         return snapshot
 
-    async def collect(self, kind, day):
+    async def collect(self, kind, day, end_date=None):
         records, ignored, seen = [], 0, set()
         self.excluded_transactions = []
         for _ in range(500):
@@ -275,7 +277,7 @@ class ReportAgent:
             if fingerprint in seen:
                 raise ReportError('pagination_repeated')
             seen.add(fingerprint)
-            rows, skipped=parse_grid(kind,snapshot['headers'],snapshot['rows'],day,self.excluded_transactions)
+            rows, skipped=parse_grid(kind,snapshot['headers'],snapshot['rows'],day,self.excluded_transactions,end_date)
             records.extend(rows);ignored+=skipped
             if not snapshot.get('next'):
                 return records, ignored

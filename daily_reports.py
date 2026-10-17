@@ -8,7 +8,7 @@ import sys
 import traceback
 from datetime import date, datetime
 from pathlib import Path
-from daily_report_data import IST, ReportError, render, today_ist
+from daily_report_data import IST, ReportError, render, today_ist, weekly_period
 
 RESULT = Path('daily_report_result.json')
 
@@ -26,7 +26,7 @@ def write_result(data):
 
 def settings():
     kind=os.getenv('REPORT_TYPE','expiry')
-    if kind not in ('expiry','renewals'):
+    if kind not in ('expiry','renewals','weekly'):
         raise ReportError('invalid_report_type')
     requested=os.getenv('REPORT_DATE','').strip()
     try:
@@ -73,6 +73,10 @@ async def collect():
     stage='configuration'
     try:
         kind,day=settings()
+        end_date=None
+        if kind=='weekly':
+            day,end_date=weekly_period(day)
+        portal_kind='renewals' if kind=='weekly' else kind
         from agents.login_agent import LoginAgent
         from agents.navigation_agent import NavigationAgent
         from agents.report_agent import ReportAgent
@@ -91,13 +95,13 @@ async def collect():
                 stage='navigation'
                 await NavigationAgent(page,cfg,logger).handle_post_login_slides()
                 report=ReportAgent(page,cfg)
-                await report.open(kind)
+                await report.open(portal_kind)
                 stage='filters'
-                await report.filters(kind,day)
+                await report.filters(portal_kind,day,end_date) if end_date else await report.filters(portal_kind,day)
                 stage='extraction'
-                records,ignored=await report.collect(kind,day)
+                records,ignored=await report.collect(portal_kind,day,end_date) if end_date else await report.collect(portal_kind,day)
                 stage='formatting'
-                messages=render(kind,day,records,datetime.now(IST),ignored,getattr(report,'excluded_transactions',[]))
+                messages=render(portal_kind,day,records,datetime.now(IST),ignored,getattr(report,'excluded_transactions',[]),end_date)
                 write_result({'status':'ready','type':kind,'date':day.isoformat(),
                               'rows':len(records),'messages':messages})
                 print(f'Daily report collected: {len(records)} matching plan entries. Customer data is not printed.')
