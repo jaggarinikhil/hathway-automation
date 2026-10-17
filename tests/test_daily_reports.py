@@ -333,13 +333,13 @@ class WeeklyRangeQueryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class WeeklyCompactFormatTests(unittest.TestCase):
-    def test_only_requested_fields_and_honest_missing_phone(self):
+    def test_only_requested_weekly_fields(self):
         rows,_=parse_grid('renewals',TX,[tx_row()],DAY)
         rows[0]['phone']='9000000000'
         text='\n'.join(render('renewals',DAY,rows,datetime(2026,10,18,10,tzinfo=IST),end_date=DAY))
-        for expected in ['Box number: 0000123','Name: Example Customer','Phone number: 9000000000','Date: 2026-10-17']:
+        for expected in ['Box number: 0000123','Name: Example Customer','Date: 2026-10-17']:
             self.assertIn(expected,text)
-        for unwanted in ['VC:', 'STB:', 'Plan:', 'Transaction type:', 'Transaction time:', 'Source:']:
+        for unwanted in ['VC:', 'STB:', 'Plan:', 'Transaction type:', 'Transaction time:', 'Source:', 'Phone number:']:
             self.assertNotIn(unwanted,text)
         rows[0].pop('phone')
-        self.assertIn('Phone number: Unavailable',render('renewals',DAY,rows,datetime.now(IST),end_date=DAY)[0])
+        self.assertNotIn('Phone number:',render('renewals',DAY,rows,datetime.now(IST),end_date=DAY)[0])

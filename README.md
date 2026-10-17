@@ -311,4 +311,4 @@ Every Sunday at 10 AM IST, the report workflow sends the preceding Monday throug
 
 For a manual weekly report, select `weekly` in Daily Hathway Reports. The optional report date is the Sunday anchor (blank uses the current India date); it selects the Monday–Saturday period preceding the most recent Sunday on or before that date. No renewal is submitted. Existing secrets and report chat configuration are reused.
 
-Weekly Telegram entries contain only box number, customer name, phone number, and transaction date. Phone numbers are taken only from a recognized phone column in the transaction report; when the portal omits that column or value, the report says `Unavailable`. Daily report formatting remains unchanged.
+Weekly Telegram entries contain only box number, customer name, and transaction date. Daily report formatting remains unchanged.

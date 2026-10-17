@@ -112,7 +112,6 @@ def render(kind, report_date, records, collected_at, ignored=0, excluded=None, e
         if end_date is not None:
             lines = [f'Box number: {record["box"]}',
                      f'Name: {record.get("customer") or "Unavailable"}',
-                     f'Phone number: {record.get("phone") or "Unavailable"}',
                      f'Date: {date_value(record["time"]).isoformat()}']
         else:
             lines = [f'Box: {record["box"]}', f'VC: {record["vc"] or "Unavailable"}', f'STB: {record.get("stb") or "Unavailable"}',
