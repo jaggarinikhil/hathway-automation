@@ -316,7 +316,8 @@ class WeeklyReportTests(unittest.TestCase):
         text='\n'.join(render('renewals',date(2026,10,12),rows,datetime(2026,10,18,10,tzinfo=IST),end_date=DAY))
         self.assertIn('Weekly transactions (Monday–Saturday)',text)
         self.assertIn('Period: 2026-10-12 to 2026-10-17 (IST)',text)
-        self.assertIn('Activation: 1 | Renewal: 1',text)
+        self.assertIn('Transactions: 2',text)
+        self.assertNotIn('Transaction type:',text)
         with self.assertRaisesRegex(ReportError,'report_date_mismatch'):
             parse_grid('renewals',TX,[first],date(2026,10,13),end_date=DAY)
 
@@ -329,3 +330,16 @@ class WeeklyRangeQueryTests(unittest.IsolatedAsyncioTestCase):
         report.filters.assert_awaited_once_with('renewals',start,DAY)
         report.collect.assert_awaited_once_with('renewals',start,DAY)
         self.assertEqual(len(rows),1)
+
+
+class WeeklyCompactFormatTests(unittest.TestCase):
+    def test_only_requested_fields_and_honest_missing_phone(self):
+        rows,_=parse_grid('renewals',TX,[tx_row()],DAY)
+        rows[0]['phone']='9000000000'
+        text='\n'.join(render('renewals',DAY,rows,datetime(2026,10,18,10,tzinfo=IST),end_date=DAY))
+        for expected in ['Box number: 0000123','Name: Example Customer','Phone number: 9000000000','Date: 2026-10-17']:
+            self.assertIn(expected,text)
+        for unwanted in ['VC:', 'STB:', 'Plan:', 'Transaction type:', 'Transaction time:', 'Source:']:
+            self.assertNotIn(unwanted,text)
+        rows[0].pop('phone')
+        self.assertIn('Phone number: Unavailable',render('renewals',DAY,rows,datetime.now(IST),end_date=DAY)[0])

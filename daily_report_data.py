@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo('Asia/Kolkata')
 LABELS = {
     'vc': ('vcid', 'vcno', 'vcmacid', 'vcnumber'), 'stb': ('newstbno', 'stbno', 'stbnumber', 'stbmacid'),
-    'customer': ('customername',), 'phone': ('mobile', 'customermobile'),
+    'customer': ('customername',), 'phone': ('mobile', 'customermobile', 'mobileno', 'mobilenumber', 'phonenumber', 'customermobileno'),
     'plan': ('package', 'planname'), 'expiry': ('enddate', 'expirydate', 'planenddate', 'validupto'),
     'type': ('transactiontype',), 'time': ('transactiondatetime',),
     'renewal_status': ('renewalstatus',),
@@ -103,19 +103,27 @@ def render(kind, report_date, records, collected_at, ignored=0, excluded=None, e
 
     else:
         header += 'Source: Hathway Plan Expiry Report; all packages.\n'
+    if end_date is not None:
+        header = f'{title}\n{period}\nTransactions: {len(records)}\n'
     blocks = []
     if not records:
         blocks.append('No matching entries reported by Hathway.')
     for record in records:
-        lines = [f'Box: {record["box"]}', f'VC: {record["vc"] or "Unavailable"}', f'STB: {record.get("stb") or "Unavailable"}',
-                 f'Customer: {record["customer"] or "Unavailable"}']
-        if kind == 'expiry':
-            lines += [f'Phone: {record.get("phone") or "Unavailable"}', f'End date: {record["expiry"]}']
-            if record.get('renewal_status'):
-                lines += [f'Portal renewal status: {record["renewal_status"]}']
+        if end_date is not None:
+            lines = [f'Box number: {record["box"]}',
+                     f'Name: {record.get("customer") or "Unavailable"}',
+                     f'Phone number: {record.get("phone") or "Unavailable"}',
+                     f'Date: {date_value(record["time"]).isoformat()}']
         else:
-            lines += [f'Transaction type: {record.get("type") or "Unspecified"}', f'Transaction time: {record["time"]}']
-        lines += [f'Plan: {record.get("plan") or "Unavailable"}']
+            lines = [f'Box: {record["box"]}', f'VC: {record["vc"] or "Unavailable"}', f'STB: {record.get("stb") or "Unavailable"}',
+                     f'Customer: {record["customer"] or "Unavailable"}']
+            if kind == 'expiry':
+                lines += [f'Phone: {record.get("phone") or "Unavailable"}', f'End date: {record["expiry"]}']
+                if record.get('renewal_status'):
+                    lines += [f'Portal renewal status: {record["renewal_status"]}']
+            else:
+                lines += [f'Transaction type: {record.get("type") or "Unspecified"}', f'Transaction time: {record["time"]}']
+            lines += [f'Plan: {record.get("plan") or "Unavailable"}']
         block = '\n'.join(lines)
         if utf16_length(block) > 2700:
             raise ReportError('report_field_too_long')
