@@ -65,7 +65,9 @@ def parse_grid(kind, headers, rows, report_date, excluded=None, end_date=None):
         # Prefer New STB No, but use older STB No if the preferred cell is blank.
         item['stb'] = next((str(row[columns.index(alias)]).strip() for alias in LABELS['stb'] if alias in columns and str(row[columns.index(alias)]).strip()), '')
         # Date mismatches mean the portal did not honor the requested filters.
-        if not report_date <= date_value(item['expiry' if kind == 'expiry' else 'time']) <= (end_date or report_date):
+        returned_day=date_value(item['expiry' if kind == 'expiry' else 'time'])
+        if not report_date <= returned_day <= (end_date or report_date):
+            print(f'[REPORT] Date mismatch: requested {report_date.isoformat()} to {(end_date or report_date).isoformat()}; returned {returned_day.isoformat()}. No customer data printed.')
             raise ReportError('report_date_mismatch')
         # Preserve identifiers as strings, including leading zeros.
         item['vc'] = item.get('vc', '')

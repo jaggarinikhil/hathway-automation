@@ -259,6 +259,7 @@ class TransactionSummaryTests(unittest.IsolatedAsyncioTestCase):
         from config import Config
         page=Mock();page.url='https://portal.example/Reports/rptAddPlanTransUSER.aspx'
         page.wait_for_load_state=AsyncMock()
+        page.evaluate=AsyncMock(return_value=[])
         control=page.get_by_role.return_value.or_.return_value.first
         control.wait_for=AsyncMock()
         async def click(**kwargs):page.url='https://portal.example/Reports/rptAddPlanTransDET.aspx?showall=A'
@@ -274,6 +275,7 @@ class TransactionSummaryTests(unittest.IsolatedAsyncioTestCase):
         from config import Config
         page=Mock();page.url='https://portal.example/Reports/rptAddPlanTransDET.aspx?showall=A'
         page.wait_for_load_state=AsyncMock()
+        page.evaluate=AsyncMock(return_value=[])
         agent=ReportAgent(page,Config())
         await agent._transaction_details()
         page.get_by_role.assert_not_called()

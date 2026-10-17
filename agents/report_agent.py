@@ -126,7 +126,19 @@ class ReportAgent:
             target_day = (end_date or day) if position else day
             expected = target_day.strftime('%d-%b-%Y')
             control=self.page.locator('[id="'+item['id'].replace('"','\\"')+'"]')
-            await control.evaluate('''(el,value)=>{el.removeAttribute('readonly');el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}''',expected)
+            await control.evaluate('(el)=>el.removeAttribute("readonly")')
+            await control.fill(expected)
+            await control.press('Tab')
+            # Calendar widgets can retain a selected date separate from input.value.
+            await control.evaluate('''(el,value)=>{
+                const parts=value.split('-'), months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const selected=new Date(Number(parts[2]),months.indexOf(parts[1]),Number(parts[0]));
+                if(window.jQuery?.fn?.datepicker && window.jQuery(el).hasClass('hasDatepicker'))window.jQuery(el).datepicker('setDate',selected);
+                if(window.Sys?.Application?.getComponents){for(const component of Sys.Application.getComponents()){
+                    if(typeof component.set_selectedDate==='function' && typeof component.get_element==='function' && component.get_element()===el)component.set_selectedDate(selected);
+                }}
+                el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));
+            }''',expected)
             if date_value(await control.input_value())!=target_day:
                 raise ReportError('date_filter_not_set')
         # No individual VC filter: monitor all account-1 boxes.
@@ -135,12 +147,20 @@ class ReportAgent:
             field=boxes.nth(i)
             if await field.get_attribute('id') not in {x['id'] for x in dates} and (await field.input_value()).strip():
                 raise ReportError('unexpected_customer_filter')
+        await self._log_report_dates('search form')
         button='Submit' if kind=='expiry' else 'Search'
         await self.page.get_by_role('button',name=button,exact=True).click(timeout=self.config.element_timeout)
         await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
         if kind=='renewals':
             await self._transaction_details()
         self._assert_path(kind, detail=True)
+
+    async def _log_report_dates(self, stage):
+        # Only date-shaped values, never arbitrary input contents or customer data.
+        values=await self.page.evaluate(r"""() => [...document.querySelectorAll('input')].filter(el=>el.getClientRects().length&&/^\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}$/.test(el.value.trim())).map(el=>el.value.trim())""")
+        if isinstance(values,list):
+            safe=[value for value in values if isinstance(value,str) and re.fullmatch(r'\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}',value)]
+            print('[REPORT] '+stage+' dates: '+(', '.join(safe) or 'no visible date controls'))
 
     async def _transaction_details(self):
         # Observed in the recording: Search -> rptAddPlanTransUSER.aspx
@@ -153,6 +173,7 @@ class ReportAgent:
             await self.page.wait_for_url(summary,timeout=self.config.page_load_timeout)
         await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
         self._assert_path('renewals',detail=True)
+        await self._log_report_dates('transaction summary')
         if urlparse(self.page.url).path.lower().endswith('rptaddplantransdet.aspx'):
             return
         # View Details covers the complete account summary, rather than taking
