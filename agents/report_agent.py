@@ -2,18 +2,28 @@
 import asyncio
 import re
 from urllib.parse import urlparse
-from daily_report_data import ReportError, date_value, parse_grid
+from daily_report_data import ReportError, date_value, parse_grid, LABELS
 
 # All names and report paths below were observed in the supplied recordings.
-GRID_SCRIPT = r'''() => {
+GRID_SCRIPT = r'''({kind, labels}) => {
+ try {if(window.Sys?.WebForms?.PageRequestManager?.getInstance()?.get_isInAsyncPostBack())return {error:'report_grid_missing',loading:true};} catch {}
  const visible=el=>!!el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden';
  const text=el=>(el.innerText||'').replace(/\s+/g,' ').trim();
  const norm=value=>value.toLowerCase().replace(/[^a-z0-9]/g,'');
- const candidates=[];
+ const has=(columns,key)=>labels[key].some(alias=>columns.includes(alias));
+ const candidates=[], recognized=new Set();
+ let tableCount=0;
+
  for(const table of document.querySelectorAll('table')) {
   if(!visible(table))continue;
+  tableCount++;
   const rows=[...table.rows].filter(row=>row.closest('table')===table&&visible(row));
-  const h=rows.findIndex(row=>{const cols=[...row.cells].map(c=>norm(text(c)));return cols.includes('vcid')&&cols.includes('customername');});
+  const h=rows.findIndex(row=>{
+   const cols=[...row.cells].map(c=>norm(text(c)));
+   for(const key of Object.keys(labels))if(has(cols,key))recognized.add(key);
+   return has(cols,'customer')&&(has(cols,'vc')||has(cols,'stb'))&&
+    (kind==='expiry'?has(cols,'expiry'):has(cols,'type')&&has(cols,'time'));
+  });
   if(h<0)continue;
   const headers=[...rows[h].cells].map(text), data=[], pagers=[];
   for(const row of rows.slice(h+1)) {
@@ -49,7 +59,7 @@ GRID_SCRIPT = r'''() => {
   if(!paging&&[...table.querySelectorAll('a')].some(a=>/^(Next|›|>|\d+)$/i.test(text(a))))return {error:'pagination_unrecognized'};
   candidates.push({id:table.id,headers,rows:data,next,paging});
  }
- if(candidates.length!==1)return {error:candidates.length?'ambiguous_report_grid':'report_grid_missing'};
+ if(candidates.length!==1)return {error:candidates.length?'ambiguous_report_grid':'report_grid_missing',diagnostics:{visible_tables:tableCount,recognized_columns:[...recognized].sort()}};
  return candidates[0];
 }'''
 
@@ -57,6 +67,8 @@ class ReportAgent:
     def __init__(self, page, config):
         self.page, self.config = page, config
         self.origin = None
+        self.grid_context = page
+        self.empty_contexts = [page]
 
     async def open(self, kind):
         # Reuse the existing authenticated home page, never hardcode a hathwayN host.
@@ -125,13 +137,83 @@ class ReportAgent:
         await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
         self._assert_path(kind, detail=True)
 
+    async def _snapshot(self, kind):
+        contexts=[self.page]
+        frames=getattr(self.page,'frames',[])
+        if isinstance(frames,list):
+            origin=urlparse(self.page.url)
+            for frame in frames:
+                if frame==self.page.main_frame:
+                    continue
+                target=urlparse(frame.url)
+                same_origin=(target.scheme,target.netloc)==(origin.scheme,origin.netloc)
+                if not (same_origin or frame.url in ('about:blank','about:srcdoc')):
+                    continue
+                try:
+                    if await (await frame.frame_element()).is_visible():
+                        contexts.append(frame)
+                except Exception:
+                    continue
+        valid, failures=[], []
+        self.empty_contexts=contexts
+        for context in contexts:
+            snapshot=await context.evaluate(GRID_SCRIPT, {'kind':kind, 'labels':LABELS})
+            if not snapshot.get('error'):
+                valid.append((context,snapshot))
+            else:
+                failures.append(snapshot)
+        if any(item.get('loading') for item in failures):
+            return {'error':'report_grid_missing','loading':True}
+        if len(valid)>1:
+            return {'error':'ambiguous_report_grid'}
+        if valid:
+            self.grid_context,snapshot=valid[0]
+            return snapshot
+        specific=next((item for item in failures if item.get('error')!='report_grid_missing'),None)
+        if specific:
+            return specific
+        columns=set()
+        count=0
+        for failure in failures:
+            diagnostics=failure.get('diagnostics',{})
+            count+=diagnostics.get('visible_tables',0)
+            columns.update(diagnostics.get('recognized_columns',[]))
+        return {'error':'report_grid_missing','loading':any(item.get('loading') for item in failures),
+                'diagnostics':{'visible_tables':count,'recognized_columns':sorted(columns)}}
+
+    async def _wait_for_grid(self, kind):
+        # ASP.NET UpdatePanel responses may render after networkidle was observed.
+        # Wait for a recognizable schema, not a fixed sleep or a guessed grid ID.
+        attempts=max(1,min(120,(self.config.page_load_timeout+249)//250))
+        snapshot={}
+        for index in range(attempts):
+            snapshot=await self._snapshot(kind)
+            if snapshot.get('error')!='report_grid_missing':
+                return snapshot
+            if not snapshot.get('loading'):
+                for context in self.empty_contexts:
+                    empty=context.get_by_text(re.compile(r'^\s*No (?:records|data|results)(?: found| available)?\.?\s*$',re.I)).first
+                    if await empty.is_visible():
+                        snapshot['explicit_empty']=True
+                        return snapshot
+            if index+1<attempts:
+                await asyncio.sleep(.25)
+        # Only fixed schema names/counts; never print headers, IDs or cell values.
+        diagnostics=snapshot.get('diagnostics', {})
+        columns=[key for key in diagnostics.get('recognized_columns',[]) if key in LABELS]
+        count=diagnostics.get('visible_tables',0)
+        if not isinstance(count,int):
+            count=0
+        print(f'[REPORT] Grid not recognized after waiting. Visible tables: {count}; recognized column types: '+(', '.join(columns) or 'none'))
+        return snapshot
+
     async def collect(self, kind, day):
         records, ignored, seen = [], 0, set()
         for _ in range(500):
-            snapshot=await self.page.evaluate(GRID_SCRIPT)
+            snapshot=await self._wait_for_grid(kind)
             if snapshot.get('error'):
                 # Explicit empty-state text only; a missing grid never implies zero.
-                if snapshot['error']=='report_grid_missing' and await self.page.get_by_text(re.compile(r'^\s*No (?:records|data|results)(?: found| available)?\.?\s*$',re.I)).first.is_visible():
+                if snapshot['error']=='report_grid_missing' and snapshot.get('explicit_empty'):
                     if records:
                         raise ReportError('pagination_empty_page')
                     return records, ignored
@@ -146,7 +228,7 @@ class ReportAgent:
                 return records, ignored
             if not snapshot.get('id'):
                 raise ReportError('pagination_grid_id_missing')
-            grid=self.page.locator('[id="'+snapshot['id'].replace('"','\\"')+'"]')
+            grid=self.grid_context.locator('[id="'+snapshot['id'].replace('"','\\"')+'"]')
             next_page=snapshot['next']
             target=grid.get_by_role('link',name=next_page['text'],exact=True)
             if await target.count()!=1:
@@ -154,7 +236,7 @@ class ReportAgent:
             await target.click(timeout=self.config.element_timeout)
             await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
             for _ in range(20):
-                fresh=await self.page.evaluate(GRID_SCRIPT)
+                fresh=await self._snapshot(kind)
                 if repr((fresh.get('headers'),fresh.get('rows')))!=fingerprint:
                     break
                 await asyncio.sleep(.25)

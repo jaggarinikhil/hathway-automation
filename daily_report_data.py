@@ -5,9 +5,9 @@ from zoneinfo import ZoneInfo
 
 IST = ZoneInfo('Asia/Kolkata')
 LABELS = {
-    'vc': ('vcid',), 'stb': ('newstbno', 'stbno'),
+    'vc': ('vcid', 'vcno', 'vcmacid', 'vcnumber'), 'stb': ('newstbno', 'stbno', 'stbnumber', 'stbmacid'),
     'customer': ('customername',), 'phone': ('mobile', 'customermobile'),
-    'plan': ('package', 'planname'), 'expiry': ('enddate',),
+    'plan': ('package', 'planname'), 'expiry': ('enddate', 'expirydate', 'planenddate', 'validupto'),
     'type': ('transactiontype',), 'time': ('transactiondatetime',),
     'renewal_status': ('renewalstatus',),
 }
@@ -48,7 +48,9 @@ def parse_grid(kind, headers, rows, report_date):
         return None
     keys = ['vc', 'customer', 'stb', 'phone', 'plan']
     keys += ['expiry', 'renewal_status'] if kind == 'expiry' else ['type', 'time']
-    indices = {key: index(key, key in ('vc', 'customer', 'expiry', 'type', 'time')) for key in keys}
+    indices = {key: index(key, key in ('customer', 'expiry', 'type', 'time')) for key in keys}
+    if indices['vc'] is None and indices['stb'] is None:
+        raise ReportError('report_columns_changed')
     result, ignored = [], 0
     for row in rows:
         if len(row) != len(headers):
@@ -63,6 +65,7 @@ def parse_grid(kind, headers, rows, report_date):
             ignored += 1
             continue
         # Preserve identifiers as strings, including leading zeros.
+        item['vc'] = item.get('vc', '')
         item['box'] = item['vc'] or item.get('stb', '')
         if not re.fullmatch(r'[A-Za-z0-9-]{1,64}', item['box']):
             raise ReportError('report_identifier_missing')

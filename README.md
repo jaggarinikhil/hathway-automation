@@ -302,3 +302,5 @@ A separate **Daily Hathway Reports** workflow reads the first account's portal r
 Set repository variable `TELEGRAM_REPORT_CHAT_ID` to the owner's private chat ID. Existing primary Hathway credentials and Telegram bot secret are reused. No Cloudflare deployment is required. Schedules run from the default branch and may be delayed by GitHub. The report workflow never invokes renewal or Retrack. Customer data is not printed or uploaded as an artifact.
 
 For setup, first manual read-only tests, privacy, pagination limits, actual local test results and live-test limitations, see [DAILY_REPORTS_SETUP.md](DAILY_REPORTS_SETUP.md).
+
+The daily-report reader waits for delayed ASP.NET results and supports visible same-origin report frames. Expiry tables can use a VC or STB identifier column, including reports without a VC column. If detection still fails, Actions logs show only safe table counts and recognized column categories. See [EXPIRY_GRID_FIX.md](EXPIRY_GRID_FIX.md) for compatibility checks and live-test limitations.

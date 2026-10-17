@@ -198,3 +198,40 @@ class ReportStartupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result['reason'],'login_or_captcha_failed')
             login.login.assert_awaited_once()
             browser.close.assert_awaited_once()
+
+class ExpiryGridCompatibilityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_grid_waits_for_delayed_result(self):
+        from config import Config
+        a=ReportAgent(Mock(),Config(page_load_timeout=1000))
+        a.page.evaluate=AsyncMock(side_effect=[{'error':'report_grid_missing'}, {'headers':EXP,'rows':[exp_row()],'next':None}])
+        a.page.get_by_text.return_value.first.is_visible=AsyncMock(return_value=False)
+        with patch('agents.report_agent.asyncio.sleep',new=AsyncMock()):
+            records,_=await a.collect('expiry',DAY)
+        self.assertEqual(len(records),1)
+        self.assertEqual(a.page.evaluate.await_count,2)
+
+    async def test_async_postback_does_not_turn_stale_empty_message_into_zero(self):
+        from config import Config
+        a=ReportAgent(Mock(),Config(page_load_timeout=1000))
+        a.page.evaluate=AsyncMock(side_effect=[{'error':'report_grid_missing','loading':True},{'headers':EXP,'rows':[exp_row()],'next':None}])
+        a.page.get_by_text.return_value.first.is_visible=AsyncMock(return_value=True)
+        with patch('agents.report_agent.asyncio.sleep',new=AsyncMock()):
+            records,_=await a.collect('expiry',DAY)
+        self.assertEqual(len(records),1)
+
+    async def test_expiry_without_vc_column_and_alternate_date_label(self):
+        headers=['New STB No','Customer Name','Expiry Date','Mobile','Package']
+        records,_=parse_grid('expiry',headers,[['00000123','Example Customer','17/10/2026','9000000000','Plan']],DAY)
+        self.assertEqual(records[0]['box'],'00000123')
+        self.assertEqual(records[0]['vc'],'')
+
+    async def test_diagnostics_never_print_raw_headers_or_values(self):
+        from config import Config
+        a=ReportAgent(Mock(),Config(page_load_timeout=1))
+        a.page.evaluate=AsyncMock(return_value={'error':'report_grid_missing','diagnostics':{'visible_tables':3,'recognized_columns':['customer','PRIVATE_NAME']}})
+        a.page.get_by_text.return_value.first.is_visible=AsyncMock(return_value=False)
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(ReportError):await a.collect('expiry',DAY)
+        self.assertIn('Visible tables: 3',output.getvalue())
+        self.assertNotIn('PRIVATE_NAME',output.getvalue())
