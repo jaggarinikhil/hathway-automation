@@ -98,7 +98,7 @@ class ReportAgent:
         path=current.path.lower()
         allowed=['rptexpiry.aspx'] if kind=='expiry' else ['rptaddplantransmso.aspx']
         if detail and kind=='renewals':
-            allowed+=['rptaddplantransdet.aspx']
+            allowed+=['rptaddplantransuser.aspx','rptaddplantransdet.aspx']
         if '/reports/' not in path or path.rsplit('/',1)[-1] not in allowed:
             raise ReportError('unexpected_report_page')
 
@@ -136,7 +136,47 @@ class ReportAgent:
         button='Submit' if kind=='expiry' else 'Search'
         await self.page.get_by_role('button',name=button,exact=True).click(timeout=self.config.element_timeout)
         await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
+        if kind=='renewals':
+            await self._transaction_details()
         self._assert_path(kind, detail=True)
+
+    async def _transaction_details(self):
+        # Observed in the recording: Search -> rptAddPlanTransUSER.aspx
+        # (operator summary) -> View Details -> rptAddPlanTransDET.aspx.
+        summary=re.compile(r'/Reports/rptAddPlanTrans(?:USER|DET)\.aspx(?:[?#]|$)',re.I)
+        if not summary.search(self.page.url):
+            empty=self.page.get_by_text(re.compile(r'^\s*No (?:records|data|results)(?: found| available)?\.?\s*$',re.I)).first
+            if await empty.is_visible():
+                return
+            await self.page.wait_for_url(summary,timeout=self.config.page_load_timeout)
+        await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
+        self._assert_path('renewals',detail=True)
+        if urlparse(self.page.url).path.lower().endswith('rptaddplantransdet.aspx'):
+            return
+        # View Details covers the complete account summary, rather than taking
+        # just the first linked operator ID and silently dropping other users.
+        name=re.compile(r'^View\s+Details$',re.I)
+        control=self.page.get_by_role('button',name=name).or_(self.page.get_by_role('link',name=name)).first
+        await control.wait_for(state='visible',timeout=self.config.element_timeout)
+        popups=[]
+        original=self.page
+        def remember_popup(popup):
+            popups.append(popup)
+        original.on('popup',remember_popup)
+        try:
+            await control.click(timeout=self.config.element_timeout)
+            for _ in range(max(1,self.config.page_load_timeout//250)):
+                for candidate in [original]+popups:
+                    if urlparse(candidate.url).path.lower().endswith('/reports/rptaddplantransdet.aspx'):
+                        self.page=candidate
+                        self.grid_context=candidate
+                        await candidate.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
+                        self._assert_path('renewals',detail=True)
+                        return
+                await asyncio.sleep(.25)
+            raise ReportError('transaction_details_not_opened')
+        finally:
+            original.remove_listener('popup',remember_popup)
 
     async def _snapshot(self, kind):
         contexts=[self.page]

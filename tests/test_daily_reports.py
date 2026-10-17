@@ -253,3 +253,27 @@ class RenewalNavigationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('PRIVATE',str((reason,locations)))
         from playwright.async_api import Error
         self.assertEqual(daily_reports.failure_details(Error('TypeError: private portal content'))[0],'report_script_error')
+
+class TransactionSummaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_operator_summary_is_followed_to_details(self):
+        from config import Config
+        page=Mock();page.url='https://portal.example/Reports/rptAddPlanTransUSER.aspx'
+        page.wait_for_load_state=AsyncMock()
+        control=page.get_by_role.return_value.or_.return_value.first
+        control.wait_for=AsyncMock()
+        async def click(**kwargs):page.url='https://portal.example/Reports/rptAddPlanTransDET.aspx?showall=A'
+        control.click=AsyncMock(side_effect=click)
+        agent=ReportAgent(page,Config())
+        await agent._transaction_details()
+        control.click.assert_awaited_once()
+        self.assertTrue(agent.page.url.endswith('showall=A'))
+        page.on.assert_called_once()
+        page.remove_listener.assert_called_once()
+
+    async def test_direct_detail_page_is_not_clicked_again(self):
+        from config import Config
+        page=Mock();page.url='https://portal.example/Reports/rptAddPlanTransDET.aspx?showall=A'
+        page.wait_for_load_state=AsyncMock()
+        agent=ReportAgent(page,Config())
+        await agent._transaction_details()
+        page.get_by_role.assert_not_called()

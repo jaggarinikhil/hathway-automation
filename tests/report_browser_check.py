@@ -17,7 +17,7 @@ def exp_grid(page):
  return html.replace('</table>',pager+'</table>')
 def filters(kind):
  button='Submit' if kind=='expiry' else 'Search'
- action="document.getElementById('results').innerHTML=pages[1]" if kind=='expiry' else "location.href='rptAddPlanTransDET.aspx?showall=U'"
+ action="document.getElementById('results').innerHTML=pages[1]" if kind=='expiry' else "location.href='rptAddPlanTransUSER.aspx'"
  return '''<input id="from" value="16-Oct-2026"><input id="to" value="16-Oct-2026"><select><option>All</option><option>Other</option></select><input id="vc" type="text"><input type="submit" value="'''+button+'''" onclick="'''+action+'''"><div id="results"></div>'''
 async def main():
  from playwright.async_api import async_playwright
@@ -35,6 +35,8 @@ async def main():
     html=filters('expiry')+'<script>const pages='+json.dumps({n:exp_grid(n) for n in [1,2,3]})+';function showPage(n){document.getElementById("results").innerHTML=pages[n];}</script>'
    elif 'rptAddPlanTransMSO.aspx' in path:
     html=filters('renewals')
+   elif 'rptAddPlanTransUSER.aspx' in path:
+    html='<input type=\"button\" value=\"View Details\" onclick=\"location.href=\'rptAddPlanTransDET.aspx?showall=A\'\">'
    elif 'rptAddPlanTransDET.aspx' in path:
     html=table(TX,[['Example Customer','0000123','T00001','Plan','Renewal','17-Oct-2026 12:16:49 AM'],['Other Customer','0000456','T00002','Plan','Add','17-Oct-2026 12:16:49 AM']])
    else:html='Unknown fixture'
@@ -52,7 +54,7 @@ async def main():
   await agent.open('renewals');await agent.filters('renewals',DAY)
   rows,ignored=await agent.collect('renewals',DAY)
   assert len(rows)==1 and rows[0]['box']=='0000123' and ignored==1
-  print('PASS: Transaction Report -> today -> detail-page navigation; Renewal included and Add excluded')
+  print('PASS: Transaction Report -> today -> operator summary -> View Details -> detail table; Renewal included and Add excluded')
   await page.set_content('<p>No records found.</p>')
   assert await agent.collect('expiry',DAY)==([],0)
   print('PASS: explicit empty portal report')

@@ -141,6 +141,7 @@ def notify(sender=None):
         allowed={'configuration','login','navigation','filters','extraction','formatting','workflow','browser'}
         stage=data.get('stage') if data.get('stage') in allowed else 'workflow'
         reasons={
+            'transaction_details_not_opened':'The transaction summary did not open the customer-level View Details report.',
             'report_navigation_pending':'The report page was still redirecting when read.',
             'report_control_ambiguous':'More than one report control matched.',
             'report_load_timeout':'The report page did not finish loading in time.',
