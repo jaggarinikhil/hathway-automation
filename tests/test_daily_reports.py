@@ -167,3 +167,34 @@ class ReportWorkflowTests(unittest.TestCase):
         row=exp_row('');row[3]=''
         records,_=parse_grid('expiry',EXP,[row],DAY)
         self.assertEqual(records[0]['box'],'N00001')
+
+class PrimaryReportConfigTests(unittest.TestCase):
+    def test_real_existing_config_constructor(self):
+        from config import Config
+        with patch.dict(os.environ,{'HATHWAY_USERNAME':'first','HATHWAY_PASSWORD':'mock'},clear=True):
+            cfg=daily_reports.build_primary_config()
+        self.assertIsInstance(cfg,Config)
+        self.assertEqual(cfg.username,'first')
+        self.assertTrue(cfg.headless)
+
+    def test_missing_chat_variable_names_only_missing_setting(self):
+        with tempfile.TemporaryDirectory() as directory,patch.object(daily_reports,'RESULT',Path(directory)/'result.json'),patch.dict(os.environ,{'TELEGRAM_BOT_TOKEN':'mock'},clear=True):
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(daily_reports.notify(lambda *a:self.fail('Unexpected API call')),1)
+            self.assertIn('Missing or invalid repository variable TELEGRAM_REPORT_CHAT_ID',output.getvalue())
+            self.assertNotIn('Missing repository secret',output.getvalue())
+
+class ReportStartupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_real_config_reaches_login_with_mock_browser(self):
+        browser=Mock();browser.new_page=AsyncMock(return_value=Mock());browser.close=AsyncMock()
+        playwright=Mock();playwright.chromium.launch=AsyncMock(return_value=browser)
+        manager=Mock();manager.__aenter__=AsyncMock(return_value=playwright);manager.__aexit__=AsyncMock(return_value=False)
+        login=Mock();login.login=AsyncMock(return_value=False)
+        with tempfile.TemporaryDirectory() as directory,patch.object(daily_reports,'RESULT',Path(directory)/'result.json'),patch.dict(os.environ,{'HATHWAY_USERNAME':'first','HATHWAY_PASSWORD':'mock','REPORT_TYPE':'expiry'},clear=True),patch('playwright.async_api.async_playwright',return_value=manager),patch('agents.login_agent.LoginAgent',return_value=login):
+            self.assertEqual(await daily_reports.collect(),1)
+            result=json.loads(daily_reports.RESULT.read_text())
+            self.assertEqual(result['stage'],'login')
+            self.assertEqual(result['reason'],'login_or_captcha_failed')
+            login.login.assert_awaited_once()
+            browser.close.assert_awaited_once()

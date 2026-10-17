@@ -37,19 +37,25 @@ def settings():
     return kind,day
 
 
+def build_primary_config():
+    from config import Config
+    return Config(username=os.environ['HATHWAY_USERNAME'].strip(),
+                  password=os.environ['HATHWAY_PASSWORD'], headless=True)
+
+
 async def collect():
     # A stale ready result must never be reused after a failed collection.
     write_result({'status':'failed','stage':'workflow','reason':'report_not_completed'})
     stage='configuration'
     try:
         kind,day=settings()
-        from config import Config
         from agents.login_agent import LoginAgent
         from agents.navigation_agent import NavigationAgent
         from agents.report_agent import ReportAgent
         from playwright.async_api import async_playwright
-        cfg=Config(username=os.environ['HATHWAY_USERNAME'].strip(),password=os.environ['HATHWAY_PASSWORD'],headless=True,save_captcha_debug=False)
+        cfg=build_primary_config()
         logger=PrivateLogger()
+        stage='browser'
         async with async_playwright() as playwright:
             browser=await playwright.chromium.launch(headless=True)
             try:
@@ -76,7 +82,8 @@ async def collect():
     except Exception as error:
         reason=str(error) if isinstance(error,ReportError) else 'portal_or_browser_error'
         write_result({'status':'failed','stage':stage,'reason':reason})
-        print('Daily report failed at '+stage+'. No raw exception or customer data printed.')
+        safe_reason = reason if isinstance(error,ReportError) else 'portal_or_browser_error'
+        print('Daily report failed at '+stage+'; reason: '+safe_reason+'. No raw exception or customer data printed.')
         return 1
 
 
@@ -88,7 +95,10 @@ def notify(sender=None):
     token=os.getenv('TELEGRAM_BOT_TOKEN','')
     if not re.fullmatch(r'\d+',chat) or not token:
         RESULT.unlink(missing_ok=True)
-        print('Set TELEGRAM_REPORT_CHAT_ID repository variable and TELEGRAM_BOT_TOKEN secret.')
+        if not re.fullmatch(r'\d+',chat):
+            print('Missing or invalid repository variable TELEGRAM_REPORT_CHAT_ID. Set it to the owner private numeric chat ID.')
+        if not token:
+            print('Missing repository secret TELEGRAM_BOT_TOKEN.')
         return 1
     try:
         data=json.loads(RESULT.read_text())
@@ -101,7 +111,7 @@ def notify(sender=None):
             print('Invalid report result; notification stopped.')
             return 1
     else:
-        allowed={'configuration','login','navigation','filters','extraction','workflow'}
+        allowed={'configuration','login','navigation','filters','extraction','workflow','browser'}
         stage=data.get('stage') if data.get('stage') in allowed else 'workflow'
         reasons={
             'primary_credentials_missing':'First-account GitHub credentials are missing.',
