@@ -235,3 +235,21 @@ class ExpiryGridCompatibilityTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(ReportError):await a.collect('expiry',DAY)
         self.assertIn('Visible tables: 3',output.getvalue())
         self.assertNotIn('PRIVATE_NAME',output.getvalue())
+
+class RenewalNavigationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_destroyed_context_is_waited_out_without_resubmitting(self):
+        from config import Config
+        from playwright.async_api import Error
+        a=ReportAgent(Mock(),Config(page_load_timeout=1000))
+        a.page.evaluate=AsyncMock(side_effect=[Error('Execution context was destroyed, most likely because of a navigation. PRIVATE'),{'headers':TX,'rows':[tx_row()],'next':None}])
+        with patch('agents.report_agent.asyncio.sleep',new=AsyncMock()):
+            records,_=await a.collect('renewals',DAY)
+        self.assertEqual(len(records),1)
+        self.assertEqual(a.page.evaluate.await_count,2)
+
+    async def test_safe_failure_details_do_not_publish_portal_text(self):
+        reason,locations=daily_reports.failure_details(KeyError('PRIVATE CUSTOMER VALUE'))
+        self.assertEqual(reason,'report_data_shape_error')
+        self.assertNotIn('PRIVATE',str((reason,locations)))
+        from playwright.async_api import Error
+        self.assertEqual(daily_reports.failure_details(Error('TypeError: private portal content'))[0],'report_script_error')

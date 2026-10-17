@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import traceback
 from datetime import date, datetime
 from pathlib import Path
 from daily_report_data import IST, ReportError, render, today_ist
@@ -43,6 +44,29 @@ def build_primary_config():
                   password=os.environ['HATHWAY_PASSWORD'], headless=True)
 
 
+def failure_details(error):
+    """Classify internally; publish only fixed codes and our own code locations."""
+    if isinstance(error,ReportError):
+        reason=str(error)
+    else:
+        message=str(error).lower()
+        if 'execution context was destroyed' in message or 'cannot find context' in message:
+            reason='report_navigation_pending'
+        elif 'strict mode violation' in message:
+            reason='report_control_ambiguous'
+        elif 'timeout' in type(error).__name__.lower() or 'timeout' in message:
+            reason='report_load_timeout'
+        elif isinstance(error,(KeyError,TypeError,ValueError)):
+            reason='report_data_shape_error'
+        elif 'referenceerror' in message or 'typeerror' in message:
+            reason='report_script_error'
+        else:
+            reason='portal_or_browser_error'
+    allowed={'daily_reports.py','daily_report_data.py','report_agent.py'}
+    locations=[f'{Path(frame.filename).name}:{frame.lineno}' for frame in traceback.extract_tb(error.__traceback__) if Path(frame.filename).name in allowed]
+    return reason,locations[-2:]
+
+
 async def collect():
     # A stale ready result must never be reused after a failed collection.
     write_result({'status':'failed','stage':'workflow','reason':'report_not_completed'})
@@ -72,6 +96,7 @@ async def collect():
                 await report.filters(kind,day)
                 stage='extraction'
                 records,ignored=await report.collect(kind,day)
+                stage='formatting'
                 messages=render(kind,day,records,datetime.now(IST),ignored)
                 write_result({'status':'ready','type':kind,'date':day.isoformat(),
                               'rows':len(records),'messages':messages})
@@ -80,10 +105,12 @@ async def collect():
                 await browser.close()
         return 0
     except Exception as error:
-        reason=str(error) if isinstance(error,ReportError) else 'portal_or_browser_error'
+        reason,locations=failure_details(error)
         write_result({'status':'failed','stage':stage,'reason':reason})
-        safe_reason = reason if isinstance(error,ReportError) else 'portal_or_browser_error'
+        safe_reason = reason
         print('Daily report failed at '+stage+'; reason: '+safe_reason+'. No raw exception or customer data printed.')
+        if locations:
+            print('Report code location: '+', '.join(locations))
         return 1
 
 
@@ -111,9 +138,14 @@ def notify(sender=None):
             print('Invalid report result; notification stopped.')
             return 1
     else:
-        allowed={'configuration','login','navigation','filters','extraction','workflow','browser'}
+        allowed={'configuration','login','navigation','filters','extraction','formatting','workflow','browser'}
         stage=data.get('stage') if data.get('stage') in allowed else 'workflow'
         reasons={
+            'report_navigation_pending':'The report page was still redirecting when read.',
+            'report_control_ambiguous':'More than one report control matched.',
+            'report_load_timeout':'The report page did not finish loading in time.',
+            'report_data_shape_error':'A report value did not match the expected data structure.',
+            'report_script_error':'The report table reader encountered a script error.',
             'primary_credentials_missing':'First-account GitHub credentials are missing.',
             'invalid_report_type':'The report type is invalid.',
             'invalid_report_date':'The report date must use YYYY-MM-DD.',

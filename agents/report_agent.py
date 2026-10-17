@@ -2,6 +2,7 @@
 import asyncio
 import re
 from urllib.parse import urlparse
+from playwright.async_api import Error as PlaywrightError
 from daily_report_data import ReportError, date_value, parse_grid, LABELS
 
 # All names and report paths below were observed in the supplied recordings.
@@ -157,7 +158,18 @@ class ReportAgent:
         valid, failures=[], []
         self.empty_contexts=contexts
         for context in contexts:
-            snapshot=await context.evaluate(GRID_SCRIPT, {'kind':kind, 'labels':LABELS})
+            try:
+                snapshot=await context.evaluate(GRID_SCRIPT, {'kind':kind, 'labels':LABELS})
+            except PlaywrightError as error:
+                # Transaction reports redirect to a separate detail page. A new
+                # execution context can replace the form while we inspect it.
+                message=str(error).lower()
+                if any(marker in message for marker in (
+                    'execution context was destroyed', 'cannot find context',
+                    'frame was detached', 'frame has been detached',
+                )):
+                    return {'error':'report_grid_missing','loading':True}
+                raise
             if not snapshot.get('error'):
                 valid.append((context,snapshot))
             else:
