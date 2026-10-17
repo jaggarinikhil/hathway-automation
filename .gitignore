@@ -22,3 +22,6 @@ telegram-worker/.dev.vars*
 telegram-worker/.env*
 telegram-worker/node_modules/
 telegram-worker/.wrangler/
+
+# Private ephemeral daily portal reports
+daily_report_result.json

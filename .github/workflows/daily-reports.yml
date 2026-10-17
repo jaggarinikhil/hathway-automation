@@ -1,0 +1,59 @@
+name: Daily Hathway Reports
+run-name: Daily Hathway Report ${{ inputs.report_type || (github.event.schedule == '30 4 * * *' && 'expiry' || 'renewals') }}
+on:
+  schedule:
+    - cron: '30 4 * * *'   # 10:00 AM Asia/Kolkata
+    - cron: '30 13 * * *'  # 7:00 PM Asia/Kolkata
+  workflow_dispatch:
+    inputs:
+      report_type:
+        description: Read-only report from account 1
+        type: choice
+        options: [expiry, renewals]
+        default: expiry
+        required: true
+      report_date:
+        description: Optional YYYY-MM-DD; blank uses current India date
+        type: string
+        required: false
+      send_telegram:
+        description: Send report to the configured owner chat
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: hathway-daily-reports
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      REPORT_TYPE: ${{ inputs.report_type || (github.event.schedule == '30 4 * * *' && 'expiry' || 'renewals') }}
+      REPORT_DATE: ${{ inputs.report_date }}
+      REPORT_SEND_TELEGRAM: ${{ github.event_name == 'schedule' || inputs.send_telegram }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install existing Python dependencies
+        run: pip install -r requirements.txt
+      - name: Install Chromium and Tesseract
+        run: |
+          python -m playwright install --with-deps chromium
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr
+      - name: Read account 1 report (no renewal actions)
+        env:
+          HATHWAY_USERNAME: ${{ secrets.HATHWAY_USERNAME }}
+          HATHWAY_PASSWORD: ${{ secrets.HATHWAY_PASSWORD }}
+        run: python daily_reports.py collect
+      - name: Send report or failure notice to owner
+        if: always()
+        env:
+          TELEGRAM_REPORT_CHAT_ID: ${{ vars.TELEGRAM_REPORT_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: python daily_reports.py notify

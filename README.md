@@ -291,3 +291,14 @@ Telegram no longer includes Retrack status/stage/reason or the Retrack retry rem
 ### Hathway Customer Name / Customer Mobile labels
 
 The Customer Details page uses a single `Customer Name` field and `Customer Mobile`. These exact labels are supported, including separate colon cells, spans, and the nested TV Details table that identifies the requested VC. Leading zeros are preserved. Telegram shows `Customer name` as the full portal-provided name and `Phone`; it does not guess a first/last-name split. Legacy separately labeled first/last fields remain supported and are joined for display. Retrack messages remain omitted; its execution is unchanged.
+
+## Daily account-1 reports
+
+A separate **Daily Hathway Reports** workflow reads the first account's portal reports and sends the owner:
+
+- **10 AM IST:** today's Plan Expiry Report for all packages/boxes.
+- **7 PM IST:** today's Transaction Report entries whose Transaction Type is Renewal, including renewals made outside the bot. This is a snapshot; later transactions are not included.
+
+Set repository variable `TELEGRAM_REPORT_CHAT_ID` to the owner's private chat ID. Existing primary Hathway credentials and Telegram bot secret are reused. No Cloudflare deployment is required. Schedules run from the default branch and may be delayed by GitHub. The report workflow never invokes renewal or Retrack. Customer data is not printed or uploaded as an artifact.
+
+For setup, first manual read-only tests, privacy, pagination limits, actual local test results and live-test limitations, see [DAILY_REPORTS_SETUP.md](DAILY_REPORTS_SETUP.md).
