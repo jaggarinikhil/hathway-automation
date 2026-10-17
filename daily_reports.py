@@ -6,7 +6,7 @@ import os
 import re
 import sys
 import traceback
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from daily_report_data import IST, ReportError, render, today_ist, weekly_period
 
@@ -67,6 +67,23 @@ def failure_details(error):
     return reason,locations[-2:]
 
 
+async def collect_week(report, start, end):
+    """Verify each daily query; never treat an unverified day as an empty day."""
+    filter_url=report.page.url
+    records,ignored=[],0
+    for offset in range((end-start).days+1):
+        day=start+timedelta(days=offset)
+        if offset:
+            await report.page.goto(filter_url)
+            await report.page.wait_for_load_state('networkidle',timeout=report.config.page_load_timeout)
+        await report.filters('renewals',day)
+        rows,skipped=await report.collect('renewals',day)
+        records.extend(rows)
+        ignored+=skipped
+        print(f'Weekly daily query verified: {day.isoformat()}; transactions: {len(rows)}. No customer data printed.')
+    return records,ignored
+
+
 async def collect():
     # A stale ready result must never be reused after a failed collection.
     write_result({'status':'failed','stage':'workflow','reason':'report_not_completed'})
@@ -96,10 +113,14 @@ async def collect():
                 await NavigationAgent(page,cfg,logger).handle_post_login_slides()
                 report=ReportAgent(page,cfg)
                 await report.open(portal_kind)
-                stage='filters'
-                await report.filters(portal_kind,day,end_date) if end_date else await report.filters(portal_kind,day)
-                stage='extraction'
-                records,ignored=await report.collect(portal_kind,day,end_date) if end_date else await report.collect(portal_kind,day)
+                if end_date:
+                    stage='extraction'
+                    records,ignored=await collect_week(report,day,end_date)
+                else:
+                    stage='filters'
+                    await report.filters(portal_kind,day)
+                    stage='extraction'
+                    records,ignored=await report.collect(portal_kind,day)
                 stage='formatting'
                 messages=render(portal_kind,day,records,datetime.now(IST),ignored,getattr(report,'excluded_transactions',[]),end_date)
                 write_result({'status':'ready','type':kind,'date':day.isoformat(),
