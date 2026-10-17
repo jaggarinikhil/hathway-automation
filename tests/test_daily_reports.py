@@ -321,27 +321,11 @@ class WeeklyReportTests(unittest.TestCase):
             parse_grid('renewals',TX,[first],date(2026,10,13),end_date=DAY)
 
 
-class WeeklyDailyQueryTests(unittest.IsolatedAsyncioTestCase):
-    async def test_each_day_is_queried_and_combined(self):
-        from datetime import timedelta
-        report=Mock()
-        report.page.url='https://portal.example/Reports/rptAddPlanTransMSO.aspx'
-        report.page.goto=AsyncMock()
-        report.page.wait_for_load_state=AsyncMock()
-        report.filters=AsyncMock()
-        report.collect=AsyncMock(side_effect=[([{'box':str(i)}],0) for i in range(6)])
+class WeeklyRangeQueryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_range_is_forwarded_to_filter_and_validation(self):
+        report=Mock();report.filters=AsyncMock();report.collect=AsyncMock(return_value=([{'box':'001'}],0))
         start=date(2026,10,12)
         rows,_=await daily_reports.collect_week(report,start,DAY)
-        self.assertEqual(len(rows),6)
-        self.assertEqual([call.args[1] for call in report.collect.await_args_list],[start+timedelta(days=i) for i in range(6)])
-        self.assertEqual(report.page.goto.await_count,5)
-
-    async def test_failed_day_aborts_week(self):
-        report=Mock()
-        report.page.url='https://portal.example/Reports/rptAddPlanTransMSO.aspx'
-        report.page.goto=AsyncMock();report.page.wait_for_load_state=AsyncMock()
-        report.filters=AsyncMock()
-        report.collect=AsyncMock(side_effect=[([],0),ReportError('report_date_mismatch')])
-        with self.assertRaisesRegex(ReportError,'report_date_mismatch'):
-            await daily_reports.collect_week(report,date(2026,10,12),DAY)
-        self.assertEqual(report.collect.await_count,2)
+        report.filters.assert_awaited_once_with('renewals',start,DAY)
+        report.collect.assert_awaited_once_with('renewals',start,DAY)
+        self.assertEqual(len(rows),1)

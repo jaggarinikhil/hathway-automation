@@ -68,20 +68,9 @@ def failure_details(error):
 
 
 async def collect_week(report, start, end):
-    """Verify each daily query; never treat an unverified day as an empty day."""
-    filter_url=report.page.url
-    records,ignored=[],0
-    for offset in range((end-start).days+1):
-        day=start+timedelta(days=offset)
-        if offset:
-            await report.page.goto(filter_url)
-            await report.page.wait_for_load_state('networkidle',timeout=report.config.page_load_timeout)
-        await report.filters('renewals',day)
-        rows,skipped=await report.collect('renewals',day)
-        records.extend(rows)
-        ignored+=skipped
-        print(f'Weekly daily query verified: {day.isoformat()}; transactions: {len(rows)}. No customer data printed.')
-    return records,ignored
+    """Submit the recorded calendar range and validate every returned date."""
+    await report.filters('renewals',start,end)
+    return await report.collect('renewals',start,end)
 
 
 async def collect():

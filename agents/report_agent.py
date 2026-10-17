@@ -1,6 +1,7 @@
 """Report navigation and extraction only. Does not import any renewal agent."""
 import asyncio
 import re
+from datetime import datetime
 from urllib.parse import urlparse
 from playwright.async_api import Error as PlaywrightError
 from daily_report_data import ReportError, date_value, parse_grid, LABELS
@@ -126,19 +127,12 @@ class ReportAgent:
             target_day = (end_date or day) if position else day
             expected = target_day.strftime('%d-%b-%Y')
             control=self.page.locator('[id="'+item['id'].replace('"','\\"')+'"]')
-            await control.evaluate('(el)=>el.removeAttribute("readonly")')
-            await control.fill(expected)
-            await control.press('Tab')
-            # Calendar widgets can retain a selected date separate from input.value.
-            await control.evaluate('''(el,value)=>{
-                const parts=value.split('-'), months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                const selected=new Date(Number(parts[2]),months.indexOf(parts[1]),Number(parts[0]));
-                if(window.jQuery?.fn?.datepicker && window.jQuery(el).hasClass('hasDatepicker'))window.jQuery(el).datepicker('setDate',selected);
-                if(window.Sys?.Application?.getComponents){for(const component of Sys.Application.getComponents()){
-                    if(typeof component.set_selectedDate==='function' && typeof component.get_element==='function' && component.get_element()===el)component.set_selectedDate(selected);
-                }}
-                el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));
-            }''',expected)
+            if kind=='renewals' and await self._calendar_date(control,target_day):
+                pass
+            else:
+                await control.evaluate('(el)=>el.removeAttribute("readonly")')
+                await control.fill(expected)
+                await control.press('Tab')
             if date_value(await control.input_value())!=target_day:
                 raise ReportError('date_filter_not_set')
         # No individual VC filter: monitor all account-1 boxes.
@@ -148,19 +142,46 @@ class ReportAgent:
             if await field.get_attribute('id') not in {x['id'] for x in dates} and (await field.input_value()).strip():
                 raise ReportError('unexpected_customer_filter')
         await self._log_report_dates('search form')
-        metadata=await self.page.evaluate(r"""() => {
-          const clean=value=>(value||'').replace(/(['"])(?:\\.|(?!\1).)*?\1/g,'<literal>').slice(0,400);
-          return [...document.querySelectorAll('input')].filter(el=>el.getClientRects().length&&(/^\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}$/.test(el.value.trim())||el.value==='Search')).map(el=>({id:el.id,name:el.name,type:el.type,disabled:el.disabled,onchange:clean(el.getAttribute('onchange')),onclick:clean(el.getAttribute('onclick')),onblur:clean(el.getAttribute('onblur'))}));
-        }""")
-        import json
-        print('[REPORT] Date/Search control metadata: '+json.dumps(metadata))
-
         button='Submit' if kind=='expiry' else 'Search'
         await self.page.get_by_role('button',name=button,exact=True).click(timeout=self.config.element_timeout)
         await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
         if kind=='renewals':
             await self._transaction_details()
         self._assert_path(kind, detail=True)
+
+    async def _calendar_date(self,control,day):
+        # Match the recording: click the adjacent calendar icon and choose a day.
+        icons=control.locator('xpath=..').locator('img:visible,input[type="image"]:visible')
+        if await icons.count()!=1:
+            return False
+        await icons.click(timeout=self.config.element_timeout)
+        calendar=self.page.locator('.ajax__calendar_container:visible')
+        await calendar.wait_for(state='visible',timeout=self.config.element_timeout)
+        for _ in range(25):
+            title=(await calendar.locator('.ajax__calendar_title').inner_text()).replace(',','').strip()
+            try:
+                shown=datetime.strptime(title,'%B %Y').date()
+            except ValueError:
+                raise ReportError('date_controls_changed') from None
+            delta=(day.year-shown.year)*12+day.month-shown.month
+            if not delta:
+                break
+            await calendar.locator('.ajax__calendar_next' if delta>0 else '.ajax__calendar_prev').click()
+        else:
+            raise ReportError('date_filter_not_set')
+        candidates=calendar.locator('.ajax__calendar_day[title]')
+        for candidate in await candidates.all():
+            title=await candidate.get_attribute('title')
+            try:
+                selected=datetime.strptime(title,'%A, %B %d, %Y').date()
+            except (ValueError,TypeError):
+                continue
+            if selected==day:
+                await candidate.click(timeout=self.config.element_timeout)
+                await calendar.wait_for(state='hidden',timeout=self.config.element_timeout)
+                print('[REPORT] Calendar selection completed: '+day.isoformat())
+                return True
+        raise ReportError('date_filter_not_set')
 
     async def _log_report_dates(self, stage):
         # Only date-shaped values, never arbitrary input contents or customer data.
