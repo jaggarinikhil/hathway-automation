@@ -35,9 +35,9 @@ class ReportDataTests(unittest.TestCase):
         self.assertEqual(ignored,0)
         self.assertNotIn('address',records[0]);self.assertNotIn('LCO Name',records[0])
 
-    def test_only_renewal_transactions_are_included(self):
+    def test_all_transaction_types_are_included(self):
         records,ignored=parse_grid('renewals',TX,[tx_row('Renewal'),tx_row('Add'),tx_row('Deactivate')],DAY)
-        self.assertEqual(len(records),1);self.assertEqual(ignored,2)
+        self.assertEqual(len(records),3);self.assertEqual(ignored,0)
         self.assertEqual(records[0]['vc'],'0000123')
 
     def test_wrong_date_and_layout_are_not_zero(self):
@@ -279,21 +279,22 @@ class TransactionSummaryTests(unittest.IsolatedAsyncioTestCase):
         page.get_by_role.assert_not_called()
 
 
-class ExcludedTransactionTests(unittest.TestCase):
-    def test_excluded_box_and_type_are_rendered_separately(self):
-        excluded=[]
-        rows,count=parse_grid('renewals',TX,[tx_row(),tx_row('Add'),tx_row('Deactivate')],DAY,excluded)
-        self.assertEqual(excluded,[{'box':'0000123','type':'Add'},{'box':'0000123','type':'Deactivate'}])
-        text='\n'.join(render('renewals',DAY,rows,datetime(2026,10,17,19,tzinfo=IST),count,excluded))
-        self.assertIn('Boxes: 1 | Plan entries: 1',text)
-        self.assertIn('Transaction type: Add',text)
-        self.assertIn('Transaction type: Deactivate',text)
+class TransactionReportTests(unittest.TestCase):
+    def test_activation_and_renewal_share_one_list(self):
+        rows,count=parse_grid('renewals',TX,[tx_row('Activation'),tx_row('Renewal')],DAY)
+        text='\n'.join(render('renewals',DAY,rows,datetime(2026,10,17,19,tzinfo=IST),count))
+        self.assertIn("Today's transactions",text)
+        self.assertIn('Boxes: 1 | Transactions: 2',text)
+        self.assertIn('Activation: 1 | Renewal: 1',text)
+        self.assertIn('Box: 0000123',text)
+        self.assertIn('Transaction type: Activation',text)
+        self.assertIn('Transaction type: Renewal',text)
+        self.assertNotIn('excluded',text)
         self.assertNotIn('PRIVATE ADDRESS',text)
 
-    def test_only_excluded_entries_and_chunking(self):
-        excluded=[]
-        rows,count=parse_grid('renewals',TX,[tx_row('Add')]*100,DAY,excluded)
-        messages=render('renewals',DAY,rows,datetime(2026,10,17,19,tzinfo=IST),count,excluded)
+    def test_all_transactions_chunk_without_loss(self):
+        rows,count=parse_grid('renewals',TX,[tx_row('Activation')]*100,DAY)
+        messages=render('renewals',DAY,rows,datetime(2026,10,17,19,tzinfo=IST),count)
         self.assertTrue(all(utf16_length(message)<3500 for message in messages))
-        self.assertEqual(sum(message.count('Transaction type: Add') for message in messages),100)
-        self.assertIn('Boxes: 0 | Plan entries: 0',messages[0])
+        self.assertEqual(sum(message.count('Transaction type: Activation') for message in messages),100)
+        self.assertIn('Transactions: 100',messages[0])

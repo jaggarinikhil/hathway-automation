@@ -53,8 +53,8 @@ async def main():
   await page.goto('https://portal.example/hathway3/Transaction/Home.aspx')
   await agent.open('renewals');await agent.filters('renewals',DAY)
   rows,ignored=await agent.collect('renewals',DAY)
-  assert len(rows)==1 and rows[0]['box']=='0000123' and ignored==1
-  print('PASS: Transaction Report -> today -> operator summary -> View Details -> detail table; Renewal included and Add excluded')
+  assert len(rows)==2 and rows[0]['box']=='0000123' and ignored==0
+  print('PASS: Transaction Report -> today -> operator summary -> View Details -> detail table; all transaction types included')
   await page.set_content('<p>No records found.</p>')
   assert await agent.collect('expiry',DAY)==([],0)
   print('PASS: explicit empty portal report')

@@ -297,7 +297,7 @@ The Customer Details page uses a single `Customer Name` field and `Customer Mobi
 A separate **Daily Hathway Reports** workflow reads the first account's portal reports and sends the owner:
 
 - **10 AM IST:** today's Plan Expiry Report for all packages/boxes.
-- **7 PM IST:** today's Transaction Report entries whose Transaction Type is Renewal, including renewals made outside the bot. This is a snapshot; later transactions are not included.
+- **7 PM IST:** today's Transaction Report entries together, including Activation and Renewal, with each box number and transaction type plus totals by type. This is a snapshot; later transactions are not included.
 
 Set repository variable `TELEGRAM_REPORT_CHAT_ID` to the owner's private chat ID. Existing primary Hathway credentials and Telegram bot secret are reused. No Cloudflare deployment is required. Schedules run from the default branch and may be delayed by GitHub. The report workflow never invokes renewal or Retrack. Customer data is not printed or uploaded as an artifact.
 

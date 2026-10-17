@@ -66,11 +66,6 @@ def parse_grid(kind, headers, rows, report_date, excluded=None):
         item['box'] = item['vc'] or item.get('stb', '')
         if not re.fullmatch(r'[A-Za-z0-9-]{1,64}', item['box']):
             raise ReportError('report_identifier_missing')
-        if kind == 'renewals' and item['type'].casefold() != 'renewal':
-            ignored += 1
-            if excluded is not None:
-                excluded.append({'box': item['box'], 'type': item['type'] or 'Unspecified'})
-            continue
         result.append(item)
     return result, ignored
 
@@ -80,16 +75,21 @@ def utf16_length(value):
 
 
 def render(kind, report_date, records, collected_at, ignored=0, excluded=None):
-    title = 'Plans ending today' if kind == 'expiry' else 'Renewals recorded today'
+    title = 'Plans ending today' if kind == 'expiry' else "Today's transactions"
     unique = len({record['box'] for record in records})
     header = (f'{title}\nDate: {report_date.isoformat()} (IST)\nAccount: 1\n'
               f'As of: {collected_at.astimezone(IST).strftime("%H:%M IST")}\n'
-              f'Boxes: {unique} | Plan entries: {len(records)}\n')
+              f'Boxes: {unique} | {"Plan entries" if kind == "expiry" else "Transactions"}: {len(records)}\n')
     if kind == 'renewals':
-        header += 'Source: Hathway Transaction Report; Transaction Type = Renewal.\n'
+        counts = {}
+        for record in records:
+            label = record.get('type') or 'Unspecified'
+            counts[label] = counts.get(label, 0) + 1
+        if counts:
+            header += ' | '.join(f'{label}: {count}' for label, count in sorted(counts.items())) + '\n'
+        header += 'Source: Hathway Transaction Report; all transaction types.\n'
         header += 'Later transactions are not included.\n'
-        if ignored:
-            header += f'Other transaction entries excluded: {ignored}\n'
+
     else:
         header += 'Source: Hathway Plan Expiry Report; all packages.\n'
     blocks = []
@@ -103,19 +103,12 @@ def render(kind, report_date, records, collected_at, ignored=0, excluded=None):
             if record.get('renewal_status'):
                 lines += [f'Portal renewal status: {record["renewal_status"]}']
         else:
-            lines += [f'Transaction time: {record["time"]}']
+            lines += [f'Transaction type: {record.get("type") or "Unspecified"}', f'Transaction time: {record["time"]}']
         lines += [f'Plan: {record.get("plan") or "Unavailable"}']
         block = '\n'.join(lines)
         if utf16_length(block) > 2700:
             raise ReportError('report_field_too_long')
         blocks.append(block)
-    if kind == 'renewals' and excluded:
-        blocks.append('Other transactions (excluded from renewal totals):')
-        for entry in excluded:
-            block = f'Box: {entry["box"]}\nTransaction type: {entry["type"]}'
-            if utf16_length(block) > 2700:
-                raise ReportError('report_field_too_long')
-            blocks.append(block)
     chunks, current = [], header
     for block in blocks:
         if utf16_length(current + '\n' + block) > 3400:
