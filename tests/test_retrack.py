@@ -58,3 +58,23 @@ class RetrackTests(unittest.IsolatedAsyncioTestCase):
     async def test_portal_failure_not_success(self):
         agent,*_=self.agent('Retrack request unsuccessful')
         self.assertEqual((await agent.run('BOX1'))['status'],'failed')
+
+
+class AlreadyActiveRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_active_box_never_enters_renewal_submission(self):
+        from agents.renewal_agent import RenewalAgent
+        agent=RenewalAgent.__new__(RenewalAgent)
+        agent.logger=Mock();agent.config=Config();agent.page=Mock()
+        agent._step_search=AsyncMock(return_value=True)
+        agent._popup=Mock();agent._popup.dismiss_popups_if_present=AsyncMock()
+        agent._get_box_status=AsyncMock(return_value='ACTIVE')
+        agent._step_select_main_tv=AsyncMock(return_value=True)
+        agent._step_renew_active=AsyncMock()
+        agent._step_add_plan=AsyncMock()
+        from unittest.mock import patch
+        with patch('agents.renewal_agent.read_customer_tab',new=AsyncMock(return_value={})):
+            self.assertTrue(await agent._run_renewal_steps('BOX1'))
+        self.assertTrue(agent.retrack_only)
+        agent._step_select_main_tv.assert_awaited_once_with('BOX1')
+        agent._step_renew_active.assert_not_awaited()
+        agent._step_add_plan.assert_not_awaited()

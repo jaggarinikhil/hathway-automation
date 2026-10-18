@@ -45,7 +45,7 @@ class CustomerTabTests(unittest.IsolatedAsyncioTestCase):
         agent._step_search=AsyncMock(return_value=True)
         agent._popup=Mock();agent._popup.dismiss_popups_if_present=AsyncMock()
         agent._get_box_status=AsyncMock(side_effect=status)
-        agent._step_renew_active=AsyncMock(side_effect=renew)
+        agent._step_select_main_tv=AsyncMock(side_effect=renew)
         with patch('agents.renewal_agent.read_customer_tab',side_effect=read):
             self.assertTrue(await agent._run_renewal_steps('001'))
         self.assertEqual(events,['status','customer','renew'])

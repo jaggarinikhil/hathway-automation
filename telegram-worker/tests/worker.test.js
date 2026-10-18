@@ -227,3 +227,13 @@ test('uncertain report dispatch is not repeated',async()=>{
  await scheduleReports(env,time,fetcher);await scheduleReports(env,time+300000,fetcher);assert.equal(calls,1);
  const row=await env.DB.prepare('SELECT * FROM report_dispatches WHERE id=?').bind('renewals-2026-10-19').first();assert.equal(row.state,'uncertain');
 });
+
+
+test('already-active Retrack completion is honest and releases completed request',async()=>{
+ const env=environment();await invoke(env,update(),api([]));
+ const response=await invoke(env,{request_id:'tg-1',chat_id:'42',run_id:'123',outcome:'retrack_completed',stage_code:'retrack',reason_code:'already_active'},api([]),'/complete');
+ assert.equal(response.status,200);const data=await response.json();
+ assert.match(data.message,/Box already active/);assert.match(data.message,/No renewal submitted/);
+ assert.doesNotMatch(data.message,/Renewal successful|Renewal automation completed successfully/);
+ assert.equal((await env.DB.prepare('SELECT * FROM requests WHERE id=?').bind('tg-1').first()).active,0);
+});

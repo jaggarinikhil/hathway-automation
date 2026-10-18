@@ -47,6 +47,7 @@ class RenewalAgent:
         Returns True if renewed successfully.
         """
         self._submission_attempted = False
+        self.retrack_only = False
         self.other_lco = False
         self.portal_failure = None
         self.customer = {}
@@ -135,8 +136,9 @@ class RenewalAgent:
         self.logger.info(f"[CUSTOMER] Captured fields: {fields}")
 
         if status == "ACTIVE":
-            self.logger.info(f"[RENEWAL][{box_number}] Processing ACTIVE box renewal flow")
-            return await self._step_renew_active(box_number)
+            self.retrack_only = True
+            self.logger.info(f"[RENEWAL][{box_number}] Box already ACTIVE; skipping renewal and preparing Retrack only")
+            return await self._step_select_main_tv(box_number)
         else:
             self.logger.info(f"[RENEWAL][{box_number}] Processing DEACTIVE box 'Add Plan' flow")
             

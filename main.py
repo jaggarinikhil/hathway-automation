@@ -70,7 +70,10 @@ async def run_automation(config: Config):
                 if success:
                     successful_boxes.append(box_number)
                     retrack_results[box_number] = await RetrackAgent(page, config, logger).run(box_number)
-                    logger.success(f"✅ Box {box_number} renewed successfully")
+                    if renewal_agent.details.get('retrack_only') is True:
+                        logger.info(f"[BOX {box_number}] Already active; Retrack-only processing completed. No renewal submitted.")
+                    else:
+                        logger.success(f"✅ Box {box_number} renewed successfully")
                 else:
                     failed_boxes.append(box_number)
                     logger.error(f"❌ Box {box_number} failed after retries")

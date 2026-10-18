@@ -26,6 +26,9 @@ def classify(successful, failed, summary, requested):
 def outcome_details(outcome, summary):
     """Allowlisted user-facing details, never raw portal exception text."""
     defaults = {
+        'retrack_completed': ('retrack', 'already_active'),
+        'retrack_failed': ('retrack', 'already_active'),
+        'retrack_unknown': ('retrack', 'already_active'),
         'confirmed_success': ('verification', 'verified'),
         'reported_success': ('final_confirmation', 'automation_reported_success'),
         'confirmed_failure': ('verification', 'portal_confirmed_failure'),
@@ -101,6 +104,10 @@ async def execute(automation=None):
     except Exception:
         # Browser errors may contain credential/session details; never publish them.
         outcome, code = 'browser_failure', 1
+    if details.get('retrack_only') is True:
+        outcome = ('retrack_completed' if retrack and retrack.get('status') in ('completed','already_requested')
+                   else 'retrack_failed' if retrack and retrack.get('status')=='failed' else 'retrack_unknown')
+        code = 0 if outcome=='retrack_completed' else 1
     result = {'schema_version': 1, 'outcome': outcome,
               'duration_seconds': round(time.monotonic()-started, 3), 'exit_code': code}
     result['stage_code'], result['reason_code'] = outcome_details(outcome, summary)

@@ -77,3 +77,18 @@ class TelegramTests(unittest.TestCase):
                 self.assertEqual(result['retrack_status'],'failed')
                 self.assertEqual(result['retrack_stage'],'button')
             finally:os.chdir(previous)
+
+
+class RetrackOnlyOutcomeTests(unittest.TestCase):
+    def test_retrack_only_is_never_reported_as_new_renewal(self):
+        from types import SimpleNamespace
+        cfg=SimpleNamespace(username='mock',password='mock',box_numbers=['BOX1'])
+        for status,expected,code in [('completed','retrack_completed',0),('already_requested','retrack_completed',0),('failed','retrack_failed',1),('unknown','retrack_unknown',1)]:
+            async def automation(config):
+                return ['BOX1'],[],{'box_details':{'BOX1':{'retrack_only':True,'account_number':1}},'post_renewal_retrack':{'BOX1':{'status':status,'stage':'result','reason':'mock'}}}
+            with tempfile.TemporaryDirectory() as d,patch('telegram_run.build_config_from_env',return_value=cfg):
+                original=os.getcwd();os.chdir(d)
+                try:
+                    self.assertEqual(asyncio.run(execute(automation)),code)
+                    self.assertEqual(json.loads(Path('telegram_result.json').read_text())['outcome'],expected)
+                finally:os.chdir(original)

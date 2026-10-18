@@ -320,3 +320,7 @@ The existing Cloudflare Worker checks the India-time clock every five minutes an
 This avoids dependence on GitHub cron timing, but Cloudflare invocation delays, GitHub runner queues, login/CAPTCHA, portal processing, and Telegram delivery can still delay arrival. Exact-minute delivery is not guaranteed. Missed invocations can catch up within six hours in the morning or until midnight for evening reports. An ambiguous dispatch is recorded and not blindly repeated; inspect Actions before a manual retry.
 
 Deployment: push the updated workflow, run `npx wrangler d1 execute hathway-telegram --remote --file=schema.sql` inside `telegram-worker`, then `npx wrangler deploy`. Keep `REPORT_SCHEDULER_ENABLED="true"`. No new secrets are required.
+
+### Already-active boxes
+
+When a searched box is ACTIVE, the automation skips plan selection, renewal Submit, and renewal Confirm. It opens Main TV and runs the existing one-shot Retrack process, including the 60-second wait and portal cooldown handling. Telegram reports this as Retrack-only processing, without claiming a new renewal. Deactivated boxes continue through the existing renewal and Retrack flow. Unknown renewal results remain locked for portal review.

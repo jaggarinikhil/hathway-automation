@@ -13,7 +13,7 @@ class RetrackAgent:
         stage = 'wait'
         attempted = False
         try:
-            self.logger.info('[RETRACK] Renewal reported success; waiting 60 seconds on the same page.')
+            self.logger.info('[RETRACK] Waiting 60 seconds on the same box page before Retrack.')
             await self._sleep(60)
             stage = 'context'
             search = self.page.locator(self.config.sel_search_box)

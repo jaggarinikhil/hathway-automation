@@ -157,8 +157,9 @@ class ReportWorkflowTests(unittest.TestCase):
     def test_schedule_configuration(self):
         # Check schedule and owner-only credential boundaries without external APIs.
         workflow=Path('.github/workflows/daily-reports.yml').read_text()
-        self.assertIn("cron: '30 4 * * *'",workflow)
-        self.assertIn("cron: '30 13 * * *'",workflow)
+        self.assertNotIn('  schedule:',workflow)
+        self.assertIn('workflow_dispatch:',workflow)
+        self.assertIn('REPORT_SCHEDULER_ENABLED = "true"',Path('telegram-worker/wrangler.toml').read_text())
         self.assertIn('if: always()',workflow)
         self.assertNotIn('HATHWAY_USERNAME_2',workflow)
         self.assertNotIn('upload-artifact',workflow)

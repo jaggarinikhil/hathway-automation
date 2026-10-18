@@ -61,7 +61,7 @@ class AccountRouter:
         return success
 
     def _capture(self, agent, success):
-        self.details = {'account_number': self.active_account}
+        self.details = {'account_number': self.active_account, 'retrack_only': getattr(agent,'retrack_only',False) is True}
         if isinstance(agent.portal_failure, dict):
             self.details['portal_failure'] = dict(agent.portal_failure)
         if success and isinstance(agent.customer, dict):

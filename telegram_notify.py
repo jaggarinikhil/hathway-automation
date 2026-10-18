@@ -29,7 +29,7 @@ def main(sender=post):
         result = json.loads(Path('telegram_result.json').read_text())
     except (OSError, ValueError):
         pass
-    allowed = {'confirmed_success', 'confirmed_failure', 'reported_success', 'unknown',
+    allowed = {'retrack_completed', 'retrack_failed', 'retrack_unknown', 'confirmed_success', 'confirmed_failure', 'reported_success', 'unknown',
                'navigation_failure', 'login_failure', 'browser_failure', 'captcha_failure', 'configuration_error'}
     if result.get('outcome') not in allowed:
         result = {'outcome': 'unknown'}
