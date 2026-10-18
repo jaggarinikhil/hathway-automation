@@ -114,7 +114,7 @@ async def read_table(page, path, required):
     if not match or int(match[1]) != (1 if int(match[3]) else 0) or int(match[2]) != int(match[3]):
         raise MonitorError("Portal list is paginated or incomplete; monitoring stopped")
     rows = await page.get_by_role("table").locator("tr").evaluate_all(
-        "rows => rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => c.innerText.trim()))")
+        "rows => rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => (c.querySelector('a.jazeLink') || c).innerText.trim()))")
     header = next((r for r in rows if all(any(k in c.upper() for c in r) for k in required)), None)
     if header is None:
         raise MonitorError("Portal columns not recognized")
@@ -142,7 +142,7 @@ async def read_table(page, path, required):
             break
         await page.wait_for_timeout(250)
         rows = await page.get_by_role("table").locator("tr").evaluate_all(
-            "rows => rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => c.innerText.trim()))")
+            "rows => rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => (c.querySelector('a.jazeLink') || c).innerText.trim()))")
     raise MonitorError("Portal row count does not match footer after scrolling")
 
 
