@@ -17,6 +17,10 @@ IST = ZoneInfo("Asia/Kolkata")
 ROOT = Path(__file__).parent
 
 
+class MonitorError(ValueError):
+    """Only fixed, non-sensitive diagnostic messages."""
+
+
 def in_window(now):
     local = now.astimezone(IST)
     return 360 <= local.hour * 60 + local.minute < 721
@@ -26,7 +30,7 @@ def assess(groups, accounts, online, previous, now):
     """Unknown accounts invalidate the entire snapshot; never infer an outage."""
     wanted = {u for members in groups.values() for u in members}
     if wanted - accounts.keys():
-        raise ValueError("Configured accounts missing from complete portal list")
+        raise MonitorError("Configured accounts missing from complete portal list")
     state, alerts = copy.deepcopy(previous), []
     for name, members in groups.items():
         eligible = [u for u in members if accounts[u] == "active"]
@@ -108,12 +112,12 @@ async def read_table(page, path, required):
     text = await footer.inner_text()
     match = re.search(r"(\d+)\s*-\s*(\d+)\s+of\s+(\d+)\s+entries", text)
     if not match or int(match[1]) != (1 if int(match[3]) else 0) or int(match[2]) != int(match[3]):
-        raise ValueError("Portal list is paginated or incomplete; monitoring stopped")
+        raise MonitorError("Portal list is paginated or incomplete; monitoring stopped")
     rows = await page.get_by_role("table").locator("tr").evaluate_all(
         "rows => rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => c.innerText.trim()))")
     header = next((r for r in rows if all(any(k in c.upper() for c in r) for k in required)), None)
     if header is None:
-        raise ValueError("Portal columns not recognized")
+        raise MonitorError("Portal columns not recognized")
     indexes = {k: next(i for i, c in enumerate(header) if k in c.upper()) for k in required}
     result = {}
     for _ in range(100):
@@ -124,7 +128,7 @@ async def read_table(page, path, required):
             username = row[indexes["USERNAME"]].strip()
             value = row[indexes["STATUS"]].lower() if "STATUS" in indexes else True
             if not username or username in batch or (username in result and result[username] != value):
-                raise ValueError("Ambiguous customer/session rows")
+                raise MonitorError("Ambiguous customer/session rows")
             batch.add(username)
             result[username] = value
         if len(result) == int(match[3]):
@@ -139,7 +143,7 @@ async def read_table(page, path, required):
         await page.wait_for_timeout(250)
         rows = await page.get_by_role("table").locator("tr").evaluate_all(
             "rows => rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => c.innerText.trim()))")
-    raise ValueError("Portal row count does not match footer after scrolling")
+    raise MonitorError("Portal row count does not match footer after scrolling")
 
 
 async def collect():
@@ -157,7 +161,7 @@ async def collect():
             accounts = await read_table(page, "/users/allusers", ["USERNAME", "STATUS"])
             allowed = {"active", "expired", "suspended", "blocked", "frozen", "pending", "disabled", "inactive"}
             if any(status not in allowed for status in accounts.values()):
-                raise ValueError("Unrecognized account status")
+                raise MonitorError("Unrecognized account status")
             online = await read_table(page, "/monitoring/active_sessions", ["USERNAME", "START TIME"])
             return accounts, set(online)
         finally:
@@ -167,7 +171,7 @@ async def collect():
 def notify(name, group, now):
     topic = os.environ["NTFY_TOPIC"]
     if not re.fullmatch(r"[A-Za-z0-9_-]{24,64}", topic):
-        raise ValueError("Use a random ntfy topic of 24-64 characters")
+        raise MonitorError("Use a random ntfy topic of 24-64 characters")
     body = (f"{name}: {group['offline']} of {group['total']} active connections offline. "
             f"Threshold: {group['threshold']}. Confirmed on two checks. "
             f"Checked {now.astimezone(IST):%Y-%m-%d %I:%M %p} IST.")
@@ -175,7 +179,7 @@ def notify(name, group, now):
                       headers={"Title": "RVR group outage", "Priority": "high"}, method="POST")
     with urlopen(request, timeout=30) as response:
         if response.status != 200:
-            raise ValueError("Notification not accepted")
+            raise MonitorError("Notification not accepted")
 
 
 async def main():
@@ -187,7 +191,7 @@ async def main():
     required = ("RVR_USERNAME", "RVR_PASSWORD") if dry_run else ("RVR_USERNAME", "RVR_PASSWORD", "NTFY_TOPIC", "GITHUB_TOKEN")
     for key in required:
         if not os.environ.get(key):
-            raise ValueError("Required secret missing: " + key)
+            raise MonitorError("Required secret missing: " + key)
     groups = json.loads((ROOT / "groups.json").read_text())
     if dry_run:
         accounts, online = await collect()
@@ -218,4 +222,6 @@ if __name__ == "__main__":
     except Exception as exc:
         # Browser exceptions may include field values, URLs or DOM content.
         print("RVR monitor failed (" + type(exc).__name__ + "). No outage inferred.")
+        if isinstance(exc, MonitorError):
+            print(str(exc))
         raise SystemExit(1)
