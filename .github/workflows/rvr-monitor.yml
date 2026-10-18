@@ -1,41 +1,33 @@
-name: RVR group monitor
+name: RVR ntfy delivery test
 on:
-  schedule:
-    # UTC = IST minus 5:30. Daily 06:00 through 12:00 noon IST.
-    - cron: '30,40,50 0 * * *'
-    - cron: '*/10 1-5 * * *'
-    - cron: '0,10,20,30 6 * * *'
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: Read-only validation at any time; no notifications or state changes
-        type: boolean
-        default: true
 permissions:
-  contents: write
-concurrency:
-  group: rvr-group-monitor
-  cancel-in-progress: false
+  contents: read
 jobs:
-  monitor:
-    if: github.event_name == 'workflow_dispatch' || vars.RVR_MONITOR_ENABLED == 'true'
+  notify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: pip
-          cache-dependency-path: rvr_monitor/requirements.txt
-      - run: pip install -r rvr_monitor/requirements.txt
-      - run: python -m playwright install --with-deps chromium
-      - name: Read RVR and send threshold alerts only
+      - name: Send one explicitly requested test notification
         env:
-          RVR_DRY_RUN: ${{ inputs.dry_run || 'false' }}
-          RVR_USERNAME: ${{ secrets.RVR_USERNAME }}
-          RVR_PASSWORD: ${{ secrets.RVR_PASSWORD }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        run: python -m rvr_monitor.monitor
+        run: |
+          python3 - <<'PYTHON'
+          import os, re, sys
+          from urllib.request import Request, urlopen
+          topic = os.environ.get("NTFY_TOPIC", "")
+          if not re.fullmatch(r"[A-Za-z0-9_-]{24,64}", topic):
+              print("Topic must contain 24-64 letters, numbers, underscores or hyphens; use only the topic name.")
+              sys.exit(1)
+          request = Request("https://ntfy.sh/" + topic,
+              data=b"This is your requested RVR notification delivery test. This is not a confirmed outage alert.",
+              headers={"Title": "RVR notification TEST", "Priority": "high"}, method="POST")
+          try:
+              with urlopen(request, timeout=30) as response:
+                  if response.status != 200:
+                      raise RuntimeError("Not accepted")
+              print("ntfy accepted the test notification. Confirm receipt on your phone.")
+          except Exception as exc:
+              print("Delivery failed: " + type(exc).__name__)
+              sys.exit(1)
+          PYTHON
