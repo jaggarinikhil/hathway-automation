@@ -13,19 +13,19 @@ class RvrTests(unittest.TestCase):
         online = set("defyz")  # 3/6 and 1/3 offline
         first, alerts = assess(self.groups, self.accounts, online, {}, self.now)
         self.assertEqual(alerts, [])
-        second, alerts = assess(self.groups, self.accounts, online, first, self.now + timedelta(minutes=30))
+        second, alerts = assess(self.groups, self.accounts, online, first, self.now + timedelta(minutes=10))
         self.assertEqual(alerts, ["six"])
         second["six"]["notified"] = True
-        third, alerts = assess(self.groups, self.accounts, online, second, self.now + timedelta(minutes=60))
+        third, alerts = assess(self.groups, self.accounts, online, second, self.now + timedelta(minutes=20))
         self.assertEqual(alerts, [])
-        recovered, alerts = assess(self.groups, self.accounts, set(self.accounts), third, self.now + timedelta(minutes=90))
+        recovered, alerts = assess(self.groups, self.accounts, set(self.accounts), third, self.now + timedelta(minutes=30))
         self.assertEqual(alerts, [])
         self.assertFalse(recovered["six"]["notified"])
 
     def test_round_up_and_zero_active(self):
         state, _ = assess(self.groups, self.accounts, set("abcdefz"), {}, self.now)
         self.assertEqual(state["three"]["threshold"], 2)
-        _, alerts = assess(self.groups, self.accounts, set("abcdefz"), state, self.now + timedelta(minutes=30))
+        _, alerts = assess(self.groups, self.accounts, set("abcdefz"), state, self.now + timedelta(minutes=10))
         self.assertEqual(alerts, ["three"])
         accounts = {u: "expired" for u in self.accounts}
         state, alerts = assess(self.groups, accounts, set(), {}, self.now)
@@ -39,7 +39,7 @@ class RvrTests(unittest.TestCase):
 
     def test_overnight_and_long_gaps_do_not_confirm(self):
         state, _ = assess(self.groups, self.accounts, set(), {}, self.now)
-        for gap in (60, 1440):
+        for gap in (16, 60, 1440):
             _, alerts = assess(self.groups, self.accounts, set(), state, self.now + timedelta(minutes=gap))
             self.assertEqual(alerts, [])
 

@@ -41,7 +41,7 @@ def assess(groups, accounts, online, previous, now):
         gap = (now - datetime.fromisoformat(last)).total_seconds() if last else 0
         signature = sorted(eligible)
         # Do not treat yesterday or skipped/failed checks as consecutive evidence.
-        consecutive = (last and 0 < gap <= 45 * 60
+        consecutive = (last and 0 < gap <= 15 * 60
                        and old.get("date") == now.astimezone(IST).date().isoformat()
                        and old.get("eligible") == signature)
         hit = bool(eligible) and offline >= threshold

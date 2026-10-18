@@ -6,7 +6,7 @@ are not called. No AI or OCR service is required.
 
 ## Schedule and rules
 
-Daily every 30 minutes, 06:00 through 12:00 noon Asia/Kolkata (13 runs/day).
+Daily every 10 minutes, 06:00 through 12:00 noon Asia/Kolkata (37 runs/day).
 GitHub cron is UTC and can be delayed. The script refuses portal checks outside
 06:00–12:00, so delayed noon runs may be skipped. Manual notification runs obey
 this window too. Manual `dry_run` defaults to true, works at any time, reads the
@@ -20,7 +20,7 @@ Expired/suspended/other recognized non-active accounts are excluded. Unknown
 accounts, unknown statuses and incomplete pagination fail closed.
 
 Half or more active members offline (rounded up) on two checks triggers one ntfy
-alert. Checks must be within 45 minutes on the same India date with unchanged
+alert. Checks must be within 15 minutes on the same India date with unchanged
 eligible membership. Long gaps restart confirmation. An existing notified outage
 remains suppressed overnight until a successful below-threshold observation.
 Recovery rearms the alert silently. No recovery, healthy, or monitoring-error push
@@ -68,8 +68,8 @@ environment, then verify one deliberate ntfy test outside this monitor. Finally 
 the Actions workflow inside the window and measure minutes. Do not deliberately
 disconnect real customers for tests.
 
-Private repositories share the account's included Actions minutes. 390 runs/30 days
-at 1/2/3 billed minutes use approximately 390/780/1170 minutes, plus other workflows.
+Private repositories share the account's included Actions minutes. 1,110 runs/30 days
+at 1/2/3 billed minutes use approximately 1,110/2,220/3,330 minutes, plus other workflows.
 The five-minute job timeout is not a monthly spending cap. Check account usage and
 set an appropriate GitHub billing budget that stops usage before enabling schedules.
 Public standard runners are free but repository content/logs/state are public.
