@@ -312,3 +312,11 @@ Every Sunday at 10 AM IST, the report workflow sends the preceding Monday throug
 For a manual weekly report, select `weekly` in Daily Hathway Reports. The optional report date is the Sunday anchor (blank uses the current India date); it selects the Monday–Saturday period preceding the most recent Sunday on or before that date. No renewal is submitted. Existing secrets and report chat configuration are reused.
 
 Weekly Telegram entries contain only box number, customer name, and transaction date. Daily report formatting remains unchanged.
+
+### Report trigger timing
+
+The existing Cloudflare Worker checks the India-time clock every five minutes and dispatches the read-only report workflow at 10 AM (expiry), 7 PM (transactions), and Sunday 10 AM (weekly). D1 stores a claim for each report type and date to prevent duplicate dispatches. GitHub cron triggers are removed; manual Actions runs remain available. The Worker reuses its existing repository Actions token and never runs Chromium.
+
+This avoids dependence on GitHub cron timing, but Cloudflare invocation delays, GitHub runner queues, login/CAPTCHA, portal processing, and Telegram delivery can still delay arrival. Exact-minute delivery is not guaranteed. Missed invocations can catch up within six hours in the morning or until midnight for evening reports. An ambiguous dispatch is recorded and not blindly repeated; inspect Actions before a manual retry.
+
+Deployment: push the updated workflow, run `npx wrangler d1 execute hathway-telegram --remote --file=schema.sql` inside `telegram-worker`, then `npx wrangler deploy`. Keep `REPORT_SCHEDULER_ENABLED="true"`. No new secrets are required.

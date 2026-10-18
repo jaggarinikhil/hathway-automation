@@ -1,3 +1,4 @@
+import {dueReports,scheduleReports} from '../src/report-scheduler.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -203,4 +204,26 @@ test('Customer Name is delivered verbatim without splitting first and last names
  assert.match(result.message,/Phone: 9000000000/);
  assert.match(result.message,/Account: 2/);
  assert.doesNotMatch(result.message,/First name:|Last name:|Retrack/i);
+});
+
+
+test('report times use IST, Sunday includes weekly, and catch-up is bounded',()=>{
+ assert.deepEqual(dueReports(Date.parse('2026-10-19T04:29:00Z')),[]);
+ assert.deepEqual(dueReports(Date.parse('2026-10-19T04:30:00Z')).map(x=>x.type),['expiry']);
+ assert.deepEqual(dueReports(Date.parse('2026-10-18T04:30:00Z')).map(x=>x.type),['expiry','weekly']);
+ assert.deepEqual(dueReports(Date.parse('2026-10-19T13:30:00Z')).map(x=>x.type),['renewals']);
+ assert.deepEqual(dueReports(Date.parse('2026-10-19T11:00:00Z')),[]);
+});
+test('report dispatch is persistent and uses existing report workflow, not renewal',async()=>{
+ const env=environment();env.REPORT_SCHEDULER_ENABLED='true';const calls=[];
+ const time=Date.parse('2026-10-19T04:30:00Z');
+ await scheduleReports(env,time,api(calls));await scheduleReports(env,time+300000,api(calls));
+ assert.equal(calls.length,1);assert.ok(calls[0].url.includes('/daily-reports.yml/dispatches'));
+ assert.deepEqual(calls[0].body.inputs,{report_type:'expiry',report_date:'2026-10-19',send_telegram:'true'});
+});
+test('uncertain report dispatch is not repeated',async()=>{
+ const env=environment();env.REPORT_SCHEDULER_ENABLED='true';let calls=0;
+ const fetcher=async()=>{calls++;throw Error('mock network failure');};const time=Date.parse('2026-10-19T13:30:00Z');
+ await scheduleReports(env,time,fetcher);await scheduleReports(env,time+300000,fetcher);assert.equal(calls,1);
+ const row=await env.DB.prepare('SELECT * FROM report_dispatches WHERE id=?').bind('renewals-2026-10-19').first();assert.equal(row.state,'uncertain');
 });

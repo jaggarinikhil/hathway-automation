@@ -1,3 +1,4 @@
+import {scheduleReports} from './report-scheduler.js';
 // Also omit legacy Retrack lines when retrying an older stored notification.
 function renewalMessage(message) {
   return String(message).split('\n').filter(line=>!/^Retrack(?: stage| reason)?:|^Do not repeat renewal to retry Retrack\.$/i.test(line)).join('\n');
@@ -176,7 +177,7 @@ export default {
     ctx.waitUntil(process(env,{...input,box:input.text}).catch(()=>{}));
     return json({accepted:true});
   },
-  async scheduled(event,env,ctx) {ctx.waitUntil(reconcile(env));}
+  async scheduled(event,env,ctx) {ctx.waitUntil(Promise.allSettled([reconcile(env),scheduleReports(env,event.scheduledTime).catch(()=>console.error('report_scheduler_failed'))]));}
 };
 export async function reconcile(env,fetcher=fetch) {
   const {results}=await env.DB.prepare("SELECT * FROM requests WHERE state IN ('pending','dispatching','uncertain','queued') AND outcome IS NULL UNION SELECT * FROM requests WHERE message IS NOT NULL AND notified=0 LIMIT 5").all();

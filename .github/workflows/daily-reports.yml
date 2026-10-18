@@ -1,10 +1,6 @@
 name: Daily Hathway Reports
-run-name: Daily Hathway Report ${{ inputs.report_type || (github.event.schedule == '30 4 * * 0' && 'weekly' || (github.event.schedule == '30 4 * * *' && 'expiry' || 'renewals')) }}
+run-name: Daily Hathway Report ${{ inputs.report_type || 'expiry' }}
 on:
-  schedule:
-    - cron: '30 4 * * *'   # 10:00 AM Asia/Kolkata
-    - cron: '30 4 * * 0'   # Sunday 10:00 AM IST, previous Monday–Saturday
-    - cron: '30 13 * * *'  # 7:00 PM Asia/Kolkata
   workflow_dispatch:
     inputs:
       report_type:
@@ -31,9 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      REPORT_TYPE: ${{ inputs.report_type || (github.event.schedule == '30 4 * * 0' && 'weekly' || (github.event.schedule == '30 4 * * *' && 'expiry' || 'renewals')) }}
+      REPORT_TYPE: ${{ inputs.report_type || 'expiry' }}
       REPORT_DATE: ${{ inputs.report_date }}
-      REPORT_SEND_TELEGRAM: ${{ github.event_name == 'schedule' || inputs.send_telegram }}
+      REPORT_SEND_TELEGRAM: ${{ inputs.send_telegram }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

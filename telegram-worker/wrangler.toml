@@ -4,6 +4,8 @@ compatibility_date = "2026-10-14"
 workers_dev = true
 
 [vars]
+REPORT_SCHEDULER_ENABLED = "true"
+GITHUB_REPORT_WORKFLOW_FILE = "daily-reports.yml"
 TELEGRAM_ADMIN_CHAT_IDS = "7272926644"
 GITHUB_OWNER = "jaggarinikhil"
 GITHUB_REPO = "hathway-automation"

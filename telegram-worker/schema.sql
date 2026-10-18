@@ -22,3 +22,13 @@ CREATE TABLE IF NOT EXISTS requester_names (
  request_id TEXT PRIMARY KEY,
  display_name TEXT NOT NULL
 );
+
+-- Durable report dispatch claims: prevent repeated cron invocations from dispatching twice.
+CREATE TABLE IF NOT EXISTS report_dispatches (
+ id TEXT PRIMARY KEY,
+ report_type TEXT NOT NULL,
+ report_date TEXT NOT NULL,
+ state TEXT NOT NULL,
+ created INTEGER NOT NULL,
+ http_status INTEGER
+);
