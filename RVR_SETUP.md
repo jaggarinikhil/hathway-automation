@@ -6,7 +6,9 @@ are not called. No AI or OCR service is required.
 
 ## Schedule and rules
 
-Daily every 10 minutes, 06:00 until midnight Asia/Kolkata (108 runs/day; last check 23:50).
+Daily every 10 minutes within 06:00 until midnight Asia/Kolkata (108 scheduled runs/day; first check 06:03, last check 23:53).
+The three-minute offset avoids the top of the hour. GitHub may still delay or drop
+schedules; this is best-effort monitoring, not a guaranteed ten-minute service.
 GitHub cron is UTC and can be delayed. The script refuses portal checks outside
 06:00–23:59, so runs delayed past midnight are skipped. Manual notification runs obey
 this window too. Manual `dry_run` defaults to true, works at any time, reads the
