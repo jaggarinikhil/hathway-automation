@@ -1,11 +1,6 @@
 name: RVR group monitor
 on:
-  schedule:
-    # UTC = IST minus 5:30. Daily 06:03 until midnight IST; last check 23:53.
-    # Offset from the top of the hour to reduce scheduler congestion; not an SLA.
-    - cron: '33,43,53 0 * * *'
-    - cron: '3,13,23,33,43,53 1-17 * * *'
-    - cron: '3,13,23 18 * * *'
+  # Cloudflare hathway-telegram dispatches every ten minutes; no GitHub cron.
   workflow_dispatch:
     inputs:
       dry_run:

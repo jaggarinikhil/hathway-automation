@@ -6,15 +6,18 @@ are not called. No AI or OCR service is required.
 
 ## Schedule and rules
 
-Daily every 10 minutes within 06:00 until midnight Asia/Kolkata (108 scheduled runs/day; first check 06:03, last check 23:53).
-The three-minute offset avoids the top of the hour. GitHub may still delay or drop
-schedules; this is best-effort monitoring, not a guaranteed ten-minute service.
-GitHub cron is UTC and can be delayed. The script refuses portal checks outside
-06:00–23:59, so runs delayed past midnight are skipped. Manual notification runs obey
-this window too. Manual `dry_run` defaults to true, works at any time, reads the
-portal and writes only group counts to the Actions summary, without notifications
-or persisted state. It requires only the two RVR secrets.
-Noon means midday, not midnight.
+Cloudflare's existing `hathway-telegram` Worker checks its five-minute timer and
+starts `rvr-monitor.yml` every ten minutes from 06:00 through 23:50 Asia/Kolkata.
+Native GitHub cron is removed to prevent duplicate triggers. GitHub may still queue
+runners; this fixes missing scheduled dispatches, not guaranteed execution latency.
+The script refuses portal checks outside 06:00–23:59.
+Cloudflare uses its existing repository token and D1 `report_dispatches` table.
+Each ten-minute slot is claimed before dispatch; duplicate ticks do not start extra
+runs. Ticks more than five minutes stale are ignored. Ambiguous network failures
+are recorded without blindly retrying. Set Worker `RVR_SCHEDULER_ENABLED=false`
+to pause dispatch. Portal credentials and ntfy topic remain only in GitHub.
+Manual `dry_run` defaults to true and reads counts without notifications or state.
+Cloudflare explicitly passes `dry_run=false` for real monitoring.
 
 The four groups are in `rvr_monitor/groups.json`. Exact, case-sensitive usernames
 are matched against the complete account list and complete Active Sessions table.
@@ -46,8 +49,8 @@ API or corrupt-state errors. The initial missing state file starts unconfirmed.
 
 Merge to the default branch only after live validation. Do not configure a Telegram
 webhook or modify the existing Cloudflare Worker for this workflow.
-Scheduled jobs remain disabled until repository variable `RVR_MONITOR_ENABLED`
-is set to `true`. Manual runs remain available for validation inside the window.
+The Cloudflare scheduler is active unless its `RVR_SCHEDULER_ENABLED` variable is false.
+The old GitHub variable does not pause workflow_dispatch runs.
 
 ## Validation still required
 

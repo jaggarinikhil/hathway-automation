@@ -237,3 +237,30 @@ test('already-active Retrack completion is honest and releases completed request
  assert.doesNotMatch(data.message,/Renewal successful|Renewal automation completed successfully/);
  assert.equal((await env.DB.prepare('SELECT * FROM requests WHERE id=?').bind('tg-1').first()).active,0);
 });
+
+// RVR uses the existing Cloudflare timer; no customer renewals or Telegram sends.
+const {rvrSlot,scheduleRvr}=await import('../src/rvr-scheduler.js');
+test('RVR timer only runs every ten minutes from 6 AM to midnight IST',()=>{
+ for(const [iso,due] of [['2026-10-19T00:20:00Z',false],['2026-10-19T00:30:00Z',true],['2026-10-19T00:35:00Z',false],['2026-10-19T18:20:00Z',true],['2026-10-19T18:30:00Z',false]])
+  assert.equal(Boolean(rvrSlot(Date.parse(iso))),due);
+});
+test('RVR dispatch is live, duplicate-safe, and isolated from renewal workflow',async()=>{
+ const env=environment(),calls=[],now=Date.parse('2026-10-19T12:00:00Z');
+ await Promise.all([scheduleRvr(env,now,api(calls),now),scheduleRvr(env,now,api(calls),now)]);
+ assert.equal(calls.length,1);
+ assert.ok(calls[0].url.endsWith('/rvr-monitor.yml/dispatches'));
+ assert.deepEqual(calls[0].body,{ref:'main',inputs:{dry_run:'false'}});
+});
+test('RVR rejects stale ticks and disabled configuration',async()=>{
+ const env=environment(),calls=[],now=Date.parse('2026-10-19T12:00:00Z');
+ await scheduleRvr(env,now,api(calls),now+6*60000);
+ env.RVR_SCHEDULER_ENABLED='false';
+ await scheduleRvr(env,now,api(calls),now);
+ assert.equal(calls.length,0);
+});
+test('RVR never retries an uncertain dispatch in the same slot',async()=>{
+ const env=environment(),now=Date.parse('2026-10-19T12:00:00Z');let calls=0;
+ const fail=async()=>{calls++;throw new Error('network');};
+ await scheduleRvr(env,now,fail,now);await scheduleRvr(env,now,fail,now);
+ assert.equal(calls,1);
+});
