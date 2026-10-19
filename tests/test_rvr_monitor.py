@@ -44,7 +44,7 @@ class RvrTests(unittest.TestCase):
             self.assertEqual(alerts, [])
 
     def test_window(self):
-        for hour, minute, expected in [(5,59,False),(6,0,True),(11,59,True),(12,0,True),(12,1,False),(23,0,False)]:
+        for hour, minute, expected in [(5,59,False),(6,0,True),(11,59,True),(12,0,True),(12,1,True),(23,0,True),(23,59,True),(0,0,False)]:
             self.assertEqual(in_window(self.now.replace(hour=hour, minute=minute)), expected)
 
 

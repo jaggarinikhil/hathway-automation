@@ -1,10 +1,10 @@
 name: RVR group monitor
 on:
   schedule:
-    # UTC = IST minus 5:30. Daily 06:00 through 12:00 noon IST.
+    # UTC = IST minus 5:30. Daily 06:00 until midnight IST; last check 23:50.
     - cron: '30,40,50 0 * * *'
-    - cron: '*/10 1-5 * * *'
-    - cron: '0,10,20,30 6 * * *'
+    - cron: '*/10 1-17 * * *'
+    - cron: '0,10,20 18 * * *'
   workflow_dispatch:
     inputs:
       dry_run:

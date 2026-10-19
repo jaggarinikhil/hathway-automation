@@ -6,9 +6,9 @@ are not called. No AI or OCR service is required.
 
 ## Schedule and rules
 
-Daily every 10 minutes, 06:00 through 12:00 noon Asia/Kolkata (37 runs/day).
+Daily every 10 minutes, 06:00 until midnight Asia/Kolkata (108 runs/day; last check 23:50).
 GitHub cron is UTC and can be delayed. The script refuses portal checks outside
-06:00–12:00, so delayed noon runs may be skipped. Manual notification runs obey
+06:00–23:59, so runs delayed past midnight are skipped. Manual notification runs obey
 this window too. Manual `dry_run` defaults to true, works at any time, reads the
 portal and writes only group counts to the Actions summary, without notifications
 or persisted state. It requires only the two RVR secrets.
@@ -68,8 +68,8 @@ environment, then verify one deliberate ntfy test outside this monitor. Finally 
 the Actions workflow inside the window and measure minutes. Do not deliberately
 disconnect real customers for tests.
 
-Private repositories share the account's included Actions minutes. 1,110 runs/30 days
-at 1/2/3 billed minutes use approximately 1,110/2,220/3,330 minutes, plus other workflows.
+Private repositories share the account's included Actions minutes. 3,240 runs/30 days
+at 1/2/3 billed minutes use approximately 3,240/6,480/9,720 minutes, plus other workflows.
 The five-minute job timeout is not a monthly spending cap. Check account usage and
 set an appropriate GitHub billing budget that stops usage before enabling schedules.
 Public standard runners are free but repository content/logs/state are public.

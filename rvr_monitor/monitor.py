@@ -23,7 +23,7 @@ class MonitorError(ValueError):
 
 def in_window(now):
     local = now.astimezone(IST)
-    return 360 <= local.hour * 60 + local.minute < 721
+    return 360 <= local.hour * 60 + local.minute < 1440
 
 
 def assess(groups, accounts, online, previous, now):
