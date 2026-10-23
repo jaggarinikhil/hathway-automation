@@ -25,7 +25,7 @@ concurrency:
 jobs:
   report:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       REPORT_TYPE: ${{ inputs.report_type || 'expiry' }}
       REPORT_DATE: ${{ inputs.report_date }}
@@ -39,16 +39,19 @@ jobs:
       - name: Install existing Python dependencies
         run: pip install -r requirements.txt
       - name: Install Chromium and Tesseract
+        timeout-minutes: 8
         run: |
           python -m playwright install --with-deps chromium
-          sudo apt-get update -qq
-          sudo apt-get install -y tesseract-ocr
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
       - name: Read account 1 report (no renewal actions)
+        timeout-minutes: 9
         env:
           HATHWAY_USERNAME: ${{ secrets.HATHWAY_USERNAME }}
           HATHWAY_PASSWORD: ${{ secrets.HATHWAY_PASSWORD }}
         run: python daily_reports.py collect
       - name: Send report or failure notice to owner
+        timeout-minutes: 2
         if: always()
         env:
           TELEGRAM_REPORT_CHAT_ID: ${{ vars.TELEGRAM_REPORT_CHAT_ID }}

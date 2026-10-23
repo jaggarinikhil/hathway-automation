@@ -29,6 +29,20 @@ async def main():
         rows,_=await agent.collect('expiry',date(2026,10,17))
         assert len(rows)==1 and rows[0]['vc']=='00000123'
         print('PASS: nested report table with multiline headers and VC/Mac ID alias')
+        linked=GRID.replace('<td>00000123</td>','<td><a href="customer.aspx?id=mock">00000123</a></td>')
+        await page.set_content(linked)
+        rows,_=await agent.collect('expiry',date(2026,10,17))
+        assert len(rows)==1 and rows[0]['box']=='00000123'
+        print('PASS: numeric customer/box links are not pagination')
+        unknown=GRID.replace('</table>','<tr><td colspan="4"><a href="unknown.aspx">2</a></td></tr></table>')
+        await page.set_content(unknown)
+        try:
+            await agent.collect('expiry',date(2026,10,17))
+        except ReportError as error:
+            assert str(error)=='pagination_unrecognized'
+        else:
+            raise AssertionError('Unknown pager was silently ignored')
+        print('PASS: unknown pager still fails safely')
         await page.set_content('<iframe src="https://portal.example/Reports/inner.aspx"></iframe>')
         rows,_=await agent.collect('expiry',date(2026,10,17))
         assert len(rows)==1 and rows[0]['box']=='00000123'

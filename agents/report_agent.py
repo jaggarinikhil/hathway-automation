@@ -58,7 +58,12 @@ GRID_SCRIPT = r'''({kind, labels}) => {
    }
   }
   // Pager implementations not recognized above cannot be called complete.
-  if(!paging&&[...table.querySelectorAll('a')].some(a=>/^(Next|›|>|\d+)$/i.test(text(a))))return {error:'pagination_unrecognized'};
+  const unknownPager=rows.slice(h+1).some(row=>{
+   const cells=[...row.cells];
+   const pagerShape=(cells.length===1&&cells[0].colSpan>1)||/pager|pagination/i.test(row.className||'');
+   return pagerShape&&[...row.querySelectorAll('a')].some(a=>/^(Next|›|>|\d+)$/i.test(text(a)));
+  });
+  if(!paging&&unknownPager)return {error:'pagination_unrecognized'};
   candidates.push({id:table.id,headers,rows:data,next,paging});
  }
  if(candidates.length!==1)return {error:candidates.length?'ambiguous_report_grid':'report_grid_missing',diagnostics:{visible_tables:tableCount,recognized_columns:[...recognized].sort()}};
