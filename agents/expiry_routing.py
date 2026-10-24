@@ -7,6 +7,8 @@ IST=ZoneInfo('Asia/Kolkata')
 
 def expiry_day(value):
     value=re.sub(r'\s+',' ',str(value)).strip()
+    # Hathway's narrow Valid Upto cell wraps between date components.
+    value=re.sub(r'\s*([/-])\s*',r'\1',value)
     match=re.match(r'^(\d{4}-\d{2}-\d{2}|\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4})(?:\s|$)',value)
     if not match:return None
     for fmt in ('%Y-%m-%d','%d-%b-%Y','%d/%b/%Y','%d/%m/%Y','%d-%m-%Y'):

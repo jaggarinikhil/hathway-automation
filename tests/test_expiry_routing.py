@@ -7,7 +7,7 @@ from config import Config
 
 class ExpiryRoutingTests(unittest.IsolatedAsyncioTestCase):
     def test_date_formats(self):
-        for value in ['24-Oct-2026','24/10/2026','2026-10-24','24-Oct-2026 11:59 PM']:
+        for value in ['24-Oct-2026','24/10/2026','2026-10-24','24-Oct-2026 11:59 PM','24-\nOct-\n2026','24- OCT - 2026']:
             self.assertEqual(expiry_day(value),date(2026,10,24))
         self.assertIsNone(expiry_day('Unavailable'))
         self.assertIsNone(expiry_day('31/02/2026'))

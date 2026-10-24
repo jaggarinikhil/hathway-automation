@@ -8,7 +8,7 @@ async def main():
  from playwright.async_api import async_playwright
  async with async_playwright() as p:
   browser=await p.chromium.launch(headless=True);page=await browser.new_page()
-  await page.set_content('<table><tr><th>Plan Name</th><th>Expiry Date</th></tr><tr><td>Other Plan</td><td>25/10/2026</td></tr><tr><td>Example Plan</td><td>24/10/2026</td></tr></table>')
+  await page.set_content('<table><tr><th>Plan Name</th><th>Valid<br>Upto</th></tr><tr><td>Other Plan</td><td>25/10/2026</td></tr><tr><td>Example Plan</td><td>24-<br>Oct-<br>2026</td></tr></table>')
   assert await plan_expiry(page,'Example Plan')==date(2026,10,24)
   assert await plan_expiry(page,'Missing Plan') is None
   await page.set_content('<table><tr><th>Plan Name</th><th>End Date</th></tr><tr><td>Example Plan</td><td>24/10/2026</td></tr><tr><td>Example Plan</td><td>25/10/2026</td></tr></table>')
