@@ -9,9 +9,9 @@ def expiry_day(value):
     value=re.sub(r'\s+',' ',str(value)).strip()
     # Hathway's narrow Valid Upto cell wraps between date components.
     value=re.sub(r'\s*([/-])\s*',r'\1',value)
-    match=re.match(r'^(\d{4}-\d{2}-\d{2}|\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{4})(?:\s|$)',value)
+    match=re.match(r'^(\d{4}-\d{2}-\d{2}|\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/](?:\d{4}|\d{2}))(?:\s|$)',value)
     if not match:return None
-    for fmt in ('%Y-%m-%d','%d-%b-%Y','%d/%b/%Y','%d/%m/%Y','%d-%m-%Y'):
+    for fmt in ('%Y-%m-%d','%d-%b-%Y','%d/%b/%Y','%d/%m/%Y','%d-%m-%Y','%d-%b-%y','%d/%b/%y','%d/%m/%y','%d-%m-%y'):
         try:return datetime.strptime(match[1],fmt).date()
         except ValueError:pass
     return None
@@ -32,7 +32,8 @@ async def plan_expiry(page,plan_name):
           if(name<0||end<0)continue;
           for(const row of rows.slice(h+1)){
             const cells=[...row.cells];
-            if(cells.length===cols.length&&norm(text(cells[name]))===norm(plan))found.push(text(cells[end]));
+            // Hathway omits the final Action cell on some plan rows.
+            if(cells.length>Math.max(name,end)&&cells.length<=cols.length&&cells.every(c=>c.colSpan===1)&&norm(text(cells[name]))===norm(plan))found.push(text(cells[end]));
           }
           break;
         }
