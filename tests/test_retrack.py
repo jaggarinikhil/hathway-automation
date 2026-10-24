@@ -7,7 +7,7 @@ class RetrackTests(unittest.IsolatedAsyncioTestCase):
     def agent(self, text='Retrack request sent successfully', box='BOX1'):
         page=Mock()
         search=Mock();search.input_value=AsyncMock(return_value=box)
-        retrack=Mock();retrack.first=retrack;retrack.wait_for=AsyncMock();retrack.click=AsyncMock()
+        retrack=Mock();retrack.first=retrack;retrack.wait_for=AsyncMock();retrack.click=AsyncMock();retrack.is_visible=AsyncMock(return_value=True)
         page.get_by_role.return_value.or_.return_value=retrack
         confirm=Mock();confirm.first=confirm;confirm.click=AsyncMock()
         confirmation=Mock();confirmation.wait_for=AsyncMock();confirmation.get_by_role.return_value=confirm

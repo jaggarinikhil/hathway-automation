@@ -9,6 +9,12 @@ on:
         required: true
         type: string
 
+      retrack_only:
+        description: "Only Retrack this box; never submit renewal"
+        required: false
+        default: false
+        type: boolean
+
       renew_expired_once:
         description: "One-off authorization to renew this expired box (default off)"
         required: false
@@ -72,6 +78,8 @@ jobs:
           HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
           HATHWAY_RENEW_EXPIRED_ONCE: ${{ inputs.renew_expired_once }}
           HATHWAY_RENEW_EXPIRED_BOX: ${{ inputs.box_number }}
+          HATHWAY_RETRACK_ONLY: ${{ inputs.retrack_only }}
+          HATHWAY_RETRACK_BOX: ${{ inputs.box_number }}
         run: python run_gha.py
 
       - name: Run existing renewal for Telegram

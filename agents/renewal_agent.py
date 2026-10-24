@@ -137,6 +137,12 @@ class RenewalAgent:
         fields = ", ".join(sorted(self.customer)) or "unavailable"
         self.logger.info(f"[CUSTOMER] Captured fields: {fields}")
 
+        if (os.getenv('HATHWAY_RETRACK_ONLY') == 'true'
+                and os.getenv('HATHWAY_RETRACK_BOX','').strip() == box_number):
+            self.retrack_only = True
+            self.logger.info('[RENEWAL] Explicit Retrack-only run; no renewal submission permitted.')
+            return await self._step_select_main_tv(box_number)
+
         if status == "ACTIVE":
             if not await self._step_select_main_tv(box_number):
                 return False

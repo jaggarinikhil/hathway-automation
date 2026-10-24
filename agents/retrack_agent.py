@@ -22,6 +22,11 @@ class RetrackAgent:
             stage = 'button'
             retrack = self.page.get_by_role('button', name=re.compile(r'^Retrack$', re.I)).or_(
                 self.page.get_by_role('link', name=re.compile(r'^Retrack$', re.I)))
+            if not await retrack.first.is_visible():
+                # Renewal can return to Customer Details; Retrack is under Main TV.
+                main_tv=self.page.get_by_role('tab',name=re.compile(r'^Main TV$',re.I)).or_(
+                    self.page.get_by_role('link',name=re.compile(r'^Main TV$',re.I)))
+                await main_tv.first.click(timeout=self.timeout)
             await retrack.first.wait_for(state='visible', timeout=self.timeout)
             attempted = True
             await retrack.first.click(timeout=self.timeout)

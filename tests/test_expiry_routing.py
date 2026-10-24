@@ -62,3 +62,10 @@ class ExpiryRoutingTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict('os.environ',{'HATHWAY_RENEW_EXPIRED_ONCE':'true','HATHWAY_RENEW_EXPIRED_BOX':'OTHER'}):
             agent,result=await self.flow(date(2026,10,23))
         self.assertTrue(agent.retrack_only);agent._step_renew_active.assert_not_awaited()
+
+
+    async def test_explicit_retrack_only_overrides_one_off_renewal(self):
+        with patch.dict('os.environ',{'HATHWAY_RETRACK_ONLY':'true','HATHWAY_RETRACK_BOX':'BOX1','HATHWAY_RENEW_EXPIRED_ONCE':'true','HATHWAY_RENEW_EXPIRED_BOX':'BOX1'}):
+            agent,result=await self.flow(date(2026,10,23))
+        self.assertTrue(result);self.assertTrue(agent.retrack_only)
+        agent._step_renew_active.assert_not_awaited()
