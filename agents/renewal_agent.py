@@ -13,6 +13,7 @@ Steps per box:
 """
 
 import asyncio
+import os
 import re
 from playwright.async_api import Page
 from agents.portal_results import rejection, read_customer_tab
@@ -144,9 +145,13 @@ class RenewalAgent:
                 self.portal_failure = {'stage_code':'verification','reason_code':'required_element_missing'}
                 self.logger.error('[RENEWAL] Configured plan expiry unavailable or ambiguous; no renewal or Retrack submitted.')
                 return False
-            if expires == india_today():
+            today = india_today()
+            one_off = (os.getenv('HATHWAY_RENEW_EXPIRED_ONCE') == 'true'
+                       and os.getenv('HATHWAY_RENEW_EXPIRED_BOX','').strip() == box_number
+                       and expires < today)
+            if expires == today or one_off:
                 self.retrack_only = False
-                self.logger.info('[RENEWAL] Configured plan expires today (IST); continuing existing ACTIVE renewal flow.')
+                self.logger.info('[RENEWAL] One-off expired-box renewal authorized for this run.' if one_off else '[RENEWAL] Configured plan expires today (IST); continuing existing ACTIVE renewal flow.')
                 return await self._step_renew_active(box_number,main_tv_selected=True)
             self.retrack_only = True
             self.logger.info('[RENEWAL] Configured plan does not expire today (IST); Retrack only, no renewal submission.')

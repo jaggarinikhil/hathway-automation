@@ -9,6 +9,12 @@ on:
         required: true
         type: string
 
+      renew_expired_once:
+        description: "One-off authorization to renew this expired box (default off)"
+        required: false
+        default: false
+        type: boolean
+
       telegram_enabled:
         description: "Enable Telegram completion (normally set by Worker)"
         required: false
@@ -64,6 +70,8 @@ jobs:
           HATHWAY_USERNAME_2: ${{ secrets.HATHWAY_USERNAME_2 }}
           HATHWAY_PASSWORD_2: ${{ secrets.HATHWAY_PASSWORD_2 }}
           HATHWAY_BOX_NUMBER: ${{ inputs.box_number }}
+          HATHWAY_RENEW_EXPIRED_ONCE: ${{ inputs.renew_expired_once }}
+          HATHWAY_RENEW_EXPIRED_BOX: ${{ inputs.box_number }}
         run: python run_gha.py
 
       - name: Run existing renewal for Telegram

@@ -328,3 +328,5 @@ When a searched box is ACTIVE, the automation skips plan selection, renewal Subm
 ### Active-box expiry routing
 
 For an ACTIVE box, Main TV is opened and the configured plan's expiry date is read from its plan row. Expiry today in India time uses the existing active-plan renewal flow followed by Retrack. Other expiry dates use Retrack only. A missing, invalid, or conflicting expiry stops before renewal or Retrack; the run records an expiry verification error. Deactivated boxes retain the existing activation/renewal flow.
+
+A repository owner can authorize a single overdue-box renewal through the manual `renew_expired_once` checkbox (off by default). It applies only to that run's exact box number and only if its verified plan date is in the past. Telegram requests keep the normal exact-today rule.

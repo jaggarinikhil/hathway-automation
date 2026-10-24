@@ -46,3 +46,19 @@ class ExpiryRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result);self.assertFalse(agent.retrack_only)
         agent._step_renew_active.assert_not_awaited()
         self.assertEqual(agent.portal_failure['stage_code'],'verification')
+
+
+    async def test_expired_box_defaults_to_retrack(self):
+        with patch.dict('os.environ',{},clear=True):
+            agent,result=await self.flow(date(2026,10,23))
+        self.assertTrue(result);self.assertTrue(agent.retrack_only)
+        agent._step_renew_active.assert_not_awaited()
+
+    async def test_one_off_only_allows_matching_expired_box(self):
+        with patch.dict('os.environ',{'HATHWAY_RENEW_EXPIRED_ONCE':'true','HATHWAY_RENEW_EXPIRED_BOX':'BOX1'}):
+            agent,result=await self.flow(date(2026,10,23))
+        self.assertTrue(result);self.assertFalse(agent.retrack_only)
+        agent._step_renew_active.assert_awaited_once()
+        with patch.dict('os.environ',{'HATHWAY_RENEW_EXPIRED_ONCE':'true','HATHWAY_RENEW_EXPIRED_BOX':'OTHER'}):
+            agent,result=await self.flow(date(2026,10,23))
+        self.assertTrue(agent.retrack_only);agent._step_renew_active.assert_not_awaited()
