@@ -114,7 +114,7 @@ async def execute(automation=None):
     if details.get('account_number') in (1, 2):
         result['account_number'] = details['account_number']
     failure = details.get('portal_failure', {})
-    if outcome == 'confirmed_failure' and failure.get('reason_code') in ('vc_terminated_or_missing', 'insufficient_balance'):
+    if outcome == 'confirmed_failure' and failure.get('reason_code') in ('vc_terminated_or_missing', 'insufficient_balance', 'required_element_missing'):
         result['reason_code'] = failure['reason_code']
         result['stage_code'] = failure['stage_code']
         result['attempts'] = failure.get('attempts', 1)

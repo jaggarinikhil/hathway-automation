@@ -324,3 +324,7 @@ Deployment: push the updated workflow, run `npx wrangler d1 execute hathway-tele
 ### Already-active boxes
 
 When a searched box is ACTIVE, the automation skips plan selection, renewal Submit, and renewal Confirm. It opens Main TV and runs the existing one-shot Retrack process, including the 60-second wait and portal cooldown handling. Telegram reports this as Retrack-only processing, without claiming a new renewal. Deactivated boxes continue through the existing renewal and Retrack flow. Unknown renewal results remain locked for portal review.
+
+### Active-box expiry routing
+
+For an ACTIVE box, Main TV is opened and the configured plan's expiry date is read from its plan row. Expiry today in India time uses the existing active-plan renewal flow followed by Retrack. Other expiry dates use Retrack only. A missing, invalid, or conflicting expiry stops before renewal or Retrack; the run records an expiry verification error. Deactivated boxes retain the existing activation/renewal flow.

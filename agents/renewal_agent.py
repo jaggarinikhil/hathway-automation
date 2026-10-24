@@ -16,6 +16,7 @@ import asyncio
 import re
 from playwright.async_api import Page
 from agents.portal_results import rejection, read_customer_tab
+from agents.expiry_routing import plan_expiry, india_today
 from agents.navigation_agent import NavigationAgent
 from agents.popup_handler_agent import PopupHandlerAgent
 from utils.helpers import (
@@ -136,9 +137,20 @@ class RenewalAgent:
         self.logger.info(f"[CUSTOMER] Captured fields: {fields}")
 
         if status == "ACTIVE":
+            if not await self._step_select_main_tv(box_number):
+                return False
+            expires = await plan_expiry(self.page,self.config.target_plan_name)
+            if expires is None:
+                self.portal_failure = {'stage_code':'verification','reason_code':'required_element_missing'}
+                self.logger.error('[RENEWAL] Configured plan expiry unavailable or ambiguous; no renewal or Retrack submitted.')
+                return False
+            if expires == india_today():
+                self.retrack_only = False
+                self.logger.info('[RENEWAL] Configured plan expires today (IST); continuing existing ACTIVE renewal flow.')
+                return await self._step_renew_active(box_number,main_tv_selected=True)
             self.retrack_only = True
-            self.logger.info(f"[RENEWAL][{box_number}] Box already ACTIVE; skipping renewal and preparing Retrack only")
-            return await self._step_select_main_tv(box_number)
+            self.logger.info('[RENEWAL] Configured plan does not expire today (IST); Retrack only, no renewal submission.')
+            return True
         else:
             self.logger.info(f"[RENEWAL][{box_number}] Processing DEACTIVE box 'Add Plan' flow")
             
@@ -555,11 +567,11 @@ class RenewalAgent:
             self.logger.warning(f"[RENEWAL][{box_number}] Could not detect status: {e}")
             return "DEACTIVE"
 
-    async def _step_renew_active(self, box_number: str) -> bool:
+    async def _step_renew_active(self, box_number: str, main_tv_selected=False) -> bool:
         """Flow for ACTIVE boxes: Main TV -> Select existing plan -> Submit -> Confirm -> OK."""
         try:
-            # 1. Click Main TV
-            if not await self._step_select_main_tv(box_number):
+            # 1. Click Main TV unless expiry routing already opened it.
+            if not main_tv_selected and not await self._step_select_main_tv(box_number):
                 return False
 
             # 2. Find and check 'Renew' checkbox/option

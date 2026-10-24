@@ -72,7 +72,7 @@ class AlreadyActiveRoutingTests(unittest.IsolatedAsyncioTestCase):
         agent._step_renew_active=AsyncMock()
         agent._step_add_plan=AsyncMock()
         from unittest.mock import patch
-        with patch('agents.renewal_agent.read_customer_tab',new=AsyncMock(return_value={})):
+        with patch('agents.renewal_agent.read_customer_tab',new=AsyncMock(return_value={})), patch('agents.renewal_agent.plan_expiry',new=AsyncMock(return_value=__import__('datetime').date(2099,1,1))):
             self.assertTrue(await agent._run_renewal_steps('BOX1'))
         self.assertTrue(agent.retrack_only)
         agent._step_select_main_tv.assert_awaited_once_with('BOX1')
