@@ -256,18 +256,17 @@ python main.py --config-file config.json --plan "NEW PLAN NAME"
 
 This tool is intended for authorised portal users only. Ensure you have permission to automate actions on the target portal. The authors assume no liability for misuse.
 
-## Post-renewal Retrack
+## Renewal and Retrack
 
-After renewal reports success, the browser stays on the same box for 60 seconds,
-then clicks Retrack → Confirm → OK. Telegram shows the renewal result only; Retrack details remain in Actions logs.
-The portal's 15-minute repeat-request restriction does not trigger automatic retries. See [RETRACK_SETUP.md](RETRACK_SETUP.md) for rollout and tests.
-
+Successful renewal finishes without an automatic Retrack or its one-minute wait.
+Retrack remains available as a separate path for ACTIVE boxes whose plan does not
+expire today, and through the manual Retrack-only option. It never repeats renewal.
 
 ### Optional second Hathway account
 
 Add repository Actions secrets `HATHWAY_USERNAME_2` and `HATHWAY_PASSWORD_2` for your second authorized Hathway account. Keep the existing primary secrets unchanged. Both manual and Telegram renewals use these optional secrets. No Worker changes are needed.
 
-After search, only the visible message "You have no privileges to access customer information as s/he belongs to other LCO" triggers Signout, a fresh login through the existing CAPTCHA flow, and a search in account 2. Other failures and uncertain submissions never switch accounts. If both accounts deny access, processing stops. Each new box starts with account 1. Existing renewal and one-minute Retrack behavior are unchanged. If Signout does not reach Login.aspx, the switch stops safely.
+After search, only the visible message "You have no privileges to access customer information as s/he belongs to other LCO" triggers Signout, a fresh login through the existing CAPTCHA flow, and a search in account 2. Other failures and uncertain submissions never switch accounts. If both accounts deny access, processing stops. Each new box starts with account 1. Account switching preserves the renewal flow; automatic post-renewal Retrack is disabled. If Signout does not reach Login.aspx, the switch stops safely.
 
 Validation: mocked account tests, existing Python tests, Python compilation and workflow YAML parsing. Real account switching, actual Signout markup/redirect, and real renewals have not been executed for this update.
 
@@ -323,10 +322,10 @@ Deployment: push the updated workflow, run `npx wrangler d1 execute hathway-tele
 
 ### Already-active boxes
 
-When a searched box is ACTIVE, the automation skips plan selection, renewal Submit, and renewal Confirm. It opens Main TV and runs the existing one-shot Retrack process, including the 60-second wait and portal cooldown handling. Telegram reports this as Retrack-only processing, without claiming a new renewal. Deactivated boxes continue through the existing renewal and Retrack flow. Unknown renewal results remain locked for portal review.
+When a searched box is ACTIVE, the automation skips plan selection, renewal Submit, and renewal Confirm. It opens Main TV and runs the existing one-shot Retrack process, including the 60-second wait and portal cooldown handling. Telegram reports this as Retrack-only processing, without claiming a new renewal. Deactivated boxes continue through the existing renewal flow without automatic Retrack. Unknown renewal results remain locked for portal review.
 
 ### Active-box expiry routing
 
-For an ACTIVE box, Main TV is opened and the configured plan's expiry date is read from its plan row. Expiry today in India time uses the existing active-plan renewal flow followed by Retrack. Other expiry dates use Retrack only. A missing, invalid, or conflicting expiry stops before renewal or Retrack; the run records an expiry verification error. Deactivated boxes retain the existing activation/renewal flow.
+For an ACTIVE box, Main TV is opened and the configured plan's expiry date is read from its plan row. Expiry today in India time uses the existing active-plan renewal flow without automatic Retrack. Other expiry dates use Retrack only. A missing, invalid, or conflicting expiry stops before renewal or Retrack; the run records an expiry verification error. Deactivated boxes retain the existing activation/renewal flow.
 
 A repository owner can authorize a single overdue-box renewal through the manual `renew_expired_once` checkbox (off by default). It applies only to that run's exact box number and only if its verified plan date is in the past. Telegram requests keep the normal exact-today rule.
