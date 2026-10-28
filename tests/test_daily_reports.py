@@ -371,3 +371,20 @@ class ReportNavigationRecoveryTests(unittest.IsolatedAsyncioTestCase):
         agent._open_once=AsyncMock(side_effect=ReportError('unexpected_report_page'))
         with self.assertRaises(ReportError):await agent.open('expiry')
         agent._open_once.assert_awaited_once();page.goto.assert_not_awaited()
+
+
+class ReportIndexFallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_tile_uses_recorded_index_in_same_app(self):
+        from playwright.async_api import TimeoutError as BrowserTimeout
+        page=Mock(url='https://portal.example/hathway6/Home.aspx')
+        reports=Mock();reports.count=AsyncMock(return_value=0)
+        tile=Mock();tile.first.click=AsyncMock(side_effect=BrowserTimeout('missing'))
+        target=Mock();target.first=target;target.click=AsyncMock()
+        page.get_by_role=Mock(side_effect=[reports,target])
+        page.locator=Mock(return_value=reports);page.get_by_text=Mock(return_value=tile)
+        page.goto=AsyncMock();page.wait_for_load_state=AsyncMock()
+        agent=ReportAgent(page,Mock(element_timeout=1000,page_load_timeout=2000))
+        agent._assert_path=Mock()
+        await agent._open_once('expiry')
+        page.goto.assert_awaited_once_with('https://portal.example/hathway6/Reports/rptnoncasreport.aspx',wait_until='domcontentloaded',timeout=2000)
+        target.click.assert_awaited_once()

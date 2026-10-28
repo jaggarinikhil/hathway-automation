@@ -104,7 +104,18 @@ class ReportAgent:
             await reports.first.click(timeout=self.config.element_timeout)
         else:
             tile=self.page.get_by_text('Reports',exact=True)
-            await tile.first.click(timeout=self.config.element_timeout)
+            try:
+                await tile.first.click(timeout=self.config.element_timeout)
+            except PlaywrightTimeoutError:
+                # Recorded Reports index, resolved within this authenticated app.
+                # Never guess another account host or expose session URL values.
+                parts=[part for part in parsed.path.split('/') if part]
+                if len(parts)<2:
+                    raise ReportError('unexpected_report_page')
+                index_url=f'{parsed.scheme}://{parsed.netloc}/{parts[0]}/Reports/rptnoncasreport.aspx'
+                print('[REPORT] Reports tile unavailable; opening recorded Reports index.')
+                await self.page.goto(index_url,wait_until='domcontentloaded',
+                                     timeout=self.config.page_load_timeout)
         await self.page.wait_for_load_state('networkidle',timeout=self.config.page_load_timeout)
         name='Plan Expiry Report' if kind=='expiry' else 'Transaction Report'
         await self.page.get_by_role('link',name=name,exact=True).click(timeout=self.config.element_timeout)
