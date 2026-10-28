@@ -344,3 +344,30 @@ class WeeklyCompactFormatTests(unittest.TestCase):
             self.assertNotIn(unwanted,text)
         rows[0].pop('phone')
         self.assertNotIn('Phone number:',render('renewals',DAY,rows,datetime.now(IST),end_date=DAY)[0])
+
+
+class ReportNavigationRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_timeout_retries_once_from_same_authenticated_home(self):
+        from playwright.async_api import TimeoutError as BrowserTimeout
+        page=Mock(url='https://portal.example/hathway/Home.aspx')
+        page.goto=AsyncMock()
+        agent=ReportAgent(page,Mock(page_load_timeout=1000))
+        agent._open_once=AsyncMock(side_effect=[BrowserTimeout('timeout'),None])
+        await agent.open('expiry')
+        self.assertEqual(agent._open_once.await_count,2)
+        page.goto.assert_awaited_once_with(page.url,wait_until='domcontentloaded',timeout=1000)
+
+    async def test_repeated_timeout_stops_after_two_attempts(self):
+        from playwright.async_api import TimeoutError as BrowserTimeout
+        page=Mock(url='https://portal.example/hathway/Home.aspx');page.goto=AsyncMock()
+        agent=ReportAgent(page,Mock(page_load_timeout=1000))
+        agent._open_once=AsyncMock(side_effect=BrowserTimeout('timeout'))
+        with self.assertRaises(BrowserTimeout):await agent.open('expiry')
+        self.assertEqual(agent._open_once.await_count,2)
+
+    async def test_unexpected_page_is_not_retried(self):
+        page=Mock(url='https://portal.example/');page.goto=AsyncMock()
+        agent=ReportAgent(page,Mock())
+        agent._open_once=AsyncMock(side_effect=ReportError('unexpected_report_page'))
+        with self.assertRaises(ReportError):await agent.open('expiry')
+        agent._open_once.assert_awaited_once();page.goto.assert_not_awaited()

@@ -24,8 +24,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   report:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
     env:
       REPORT_TYPE: ${{ inputs.report_type || 'expiry' }}
       REPORT_DATE: ${{ inputs.report_date }}
@@ -39,11 +39,14 @@ jobs:
       - name: Install existing Python dependencies
         run: pip install -r requirements.txt
       - name: Install Chromium and Tesseract
-        timeout-minutes: 8
+        timeout-minutes: 13
         run: |
-          python -m playwright install --with-deps chromium
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
+          # Bound apt operations used by Playwright's dependency installer too.
+          printf 'Acquire::Retries "2";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' | sudo tee /etc/apt/apt.conf.d/80hathway-timeouts >/dev/null
+          timeout 180s sudo apt-get update -qq
+          timeout 180s sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng
+          timeout 180s python -m playwright install-deps chromium
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=60000 timeout 180s python -m playwright install chromium
       - name: Read account 1 report (no renewal actions)
         timeout-minutes: 9
         env:

@@ -3,7 +3,7 @@ import asyncio
 import re
 from datetime import datetime
 from urllib.parse import urlparse
-from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 from daily_report_data import ReportError, date_value, parse_grid, LABELS
 
 # All names and report paths below were observed in the supplied recordings.
@@ -78,6 +78,20 @@ class ReportAgent:
         self.empty_contexts = [page]
 
     async def open(self, kind):
+        # Read-only navigation can be retried once; never retry a renewal here.
+        home_url=self.page.url
+        for attempt in range(2):
+            try:
+                await self._open_once(kind)
+                return
+            except PlaywrightTimeoutError:
+                if attempt == 1:
+                    raise
+                print('[REPORT] Navigation timed out; retrying once from authenticated home.')
+                await self.page.goto(home_url,wait_until='domcontentloaded',
+                                     timeout=self.config.page_load_timeout)
+
+    async def _open_once(self, kind):
         # Reuse the existing authenticated home page, never hardcode a hathwayN host.
         parsed=urlparse(self.page.url)
         if parsed.scheme!='https' or not parsed.netloc:
